@@ -1,21 +1,93 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Navigate } from 'react-router-dom';
-import LoginPage from './components/LoginPage'; // adjust path
-import RegisterPage from './components/RegisterPage'; // adjust path
+// frontend/src/App.jsx
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LoginPage from './components/LoginPage';
+import RegisterPage from './components/RegisterPage';
+import VerifyEmailPage from './components/VerifyEmailPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import authService from './services/api';
+import { getRoleRedirectPath } from './hooks/useRoleRedirect'; // ✅ Import the hook
+// Dashboard Components
+import AdminDashboard from './components/AdminDashboard';
+import TechnicianDashboard from './components/TechnicianDashboard';
+import ComplaintDashboard from './components/ComplaintDashboard';
+import UnauthorizedPage from './components/UnauthorizedPage';
+import ForgotPasswordPage from './components/ForgotPasswordPage';
+import ResetPasswordPage from './components/ResetPasswordPage';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" />} />
+        {/* Public Routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        {/* your other routes */}
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />
+        
+        {/* Root redirect - Role-based */}
+        <Route 
+          path="/" 
+          element={
+            authService.isAuthenticated() 
+              ? (() => {
+
+                  const role = authService.getUserRole();
+                  const redirectPath = getRoleRedirectPath(role); // ✅ Use the hook
+                   return <Navigate to={redirectPath} replace />;
+
+                })()
+              : <Navigate to="/login" replace />
+          } 
+        />
+        
+        {/* Admin only */}
+        <Route 
+          path="/admin/dashboard" 
+          element={
+            <ProtectedRoute allowedRoles={['Admin']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* Technician only */}
+        <Route 
+          path="/technician/dashboard" 
+          element={
+            <ProtectedRoute allowedRoles={['Technician']}>
+              <TechnicianDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* Shared Dashboard for: Warden, Custodian, Resident Staff */}
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedRoute allowedRoles={['Warden', 'Custodian', 'Resident Staff']}>
+              <ComplaintDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* Catch all - redirect based on role */}
+        <Route 
+          path="*" 
+          element={
+            authService.isAuthenticated() 
+              ? (() => {
+                  const role = authService.getUserRole();
+                  const redirectPath = getRoleRedirectPath(role); // ✅ Use the hook
+                  return <Navigate to={redirectPath} replace />;
+                })()
+              : <Navigate to="/login" replace />
+          } 
+        />
       </Routes>
     </BrowserRouter>
   );
 }
 
 export default App;
-
-

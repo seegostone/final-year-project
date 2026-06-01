@@ -1,8 +1,16 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+// frontend/src/pages/LoginPage.jsx
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import authService from '../services/api';
+import { getRoleRedirectPath } from '../hooks/useRoleRedirect';
 
 export default function LoginPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get('session') === 'expired';
+  const loggedOut = searchParams.get('logout') === 'true';
+  
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -10,43 +18,78 @@ export default function LoginPage() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [message, setMessage] = useState(
+    loggedOut ? { type: 'success', text: 'Logged out successfully. Please login again to access your account.' } : 
+    sessionExpired ? { type: 'error', text: 'Your session has expired. Please login again.' } : 
+    null
+  );
+  const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (authService.isAuthenticated()) {
+      const role = authService.getUserRole();
+      const redirectPath = getRoleRedirectPath(role);
+      navigate(redirectPath);
+    }
+  }, [navigate]);
+
   const handleInputChange = (field, value) => {
     setFormData({ ...formData, [field]: value });
-    if (error) {
-      setError('');
-    }
+    if (error) setError('');
+    if (message) setMessage(null);
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
+  const validateForm = () => {
     if (!formData.email || !formData.password) {
       setError('Please enter both email and password.');
-      return;
+      return false;
     }
-
     if (!formData.email.endsWith('@mak.ac.ug')) {
       setError('Please use a valid @mak.ac.ug email address.');
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
 
     setIsLoading(true);
+    setError('');
 
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const result = await authService.login(formData.email, formData.password);
 
-      if (formData.email === 'admin@mak.ac.ug' && formData.password === 'Admin123') {
-        alert('Login successful! Redirecting to dashboard...');
+      if (result.success) {
+        setFailedAttempts(0);
+        const role = authService.getUserRole();
+        const redirectPath = getRoleRedirectPath(role);
+        navigate(redirectPath);
       } else {
+        setMessage(null);
         const newFailedAttempts = failedAttempts + 1;
         setFailedAttempts(newFailedAttempts);
-        setError('Invalid email or password. Please try again.');
+
+        if (result.type === 'UNAUTHORIZED') {
+          setError('Invalid email or password. Please try again.');
+        } else if (result.type === 'NETWORK_ERROR') {
+          setError('Cannot connect to server. Please check your internet connection.');
+        } else if (result.type === 'VALIDATION_ERROR') {
+          setError(result.error || 'Please check your input and try again.');
+        } else {
+          setError(result.error || 'Login failed. Please try again.');
+        }
       }
-    }, 1500);
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -79,6 +122,20 @@ export default function LoginPage() {
             Sign in to your account to submit or track complaints
           </p>
 
+          {message && (
+            <div className={`px-4 py-3 mb-6 border ${
+              message.type === 'success' 
+                ? 'bg-[#DCFCE7] border-[#22C55E]' 
+                : 'bg-[#FEE2E2] border-[#FF5733]'
+            }`} style={{ borderRadius: '0px' }}>
+              <p className={`text-sm m-0 ${
+                message.type === 'success' ? 'text-[#16A34A]' : 'text-[#FF5733]'
+              }`} style={{ fontFamily: 'monospace' }}>
+                {message.text}
+              </p>
+            </div>
+          )}
+
           {error && (
             <div className="bg-[#FEE2E2] border border-[#FF5733] px-4 py-3 mb-6" style={{ borderRadius: '0px' }}>
               <p className="text-sm text-[#FF5733] m-0" style={{ fontFamily: 'monospace' }}>
@@ -87,9 +144,9 @@ export default function LoginPage() {
               {failedAttempts >= 3 && (
                 <p className="text-xs text-[#FF5733] mt-2 m-0">
                   Having trouble?{' '}
-                  <a href="/forgot-password" className="underline">
+                  <Link to="/forgot-password" className="underline">
                     Reset your password
-                  </a>
+                  </Link>
                 </p>
               )}
             </div>
@@ -106,6 +163,7 @@ export default function LoginPage() {
                 className="w-full px-4 py-3 border border-[rgba(0,0,0,0.1)] bg-white text-[#1F2937] focus:outline-none focus:border-[#7B1A1A]"
                 style={{ borderRadius: '0px' }}
                 disabled={isLoading}
+                autoFocus
               />
             </div>
 
@@ -124,7 +182,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#1F2937]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#1F2937] cursor-pointer"
                   style={{ background: 'none', border: 'none', padding: '4px' }}
                   disabled={isLoading}
                 >
@@ -144,14 +202,14 @@ export default function LoginPage() {
                 />
                 <span className="text-sm text-[#1F2937]">Remember me</span>
               </label>
-              <a
-                href="/forgot-password"
+              <Link
+                to="/forgot-password"
                 className={`text-sm text-[#7B1A1A] no-underline hover:text-[#5A1313] transition-colors ${
                   failedAttempts >= 3 ? 'font-semibold' : ''
                 }`}
               >
                 Forgot Password?
-              </a>
+              </Link>
             </div>
 
             <button
