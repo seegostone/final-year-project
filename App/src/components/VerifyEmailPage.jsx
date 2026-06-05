@@ -68,6 +68,7 @@ export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
 
     try {
       const result = await authService.resendVerificationEmail(email);
+      console.log(result);
       
       if (result.success) {
         setTimeRemaining(5 * 60); // Reset timer to 5 minutes

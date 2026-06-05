@@ -20,9 +20,12 @@ export const createComplaint = async (req, res) => {
     const userId = req.user._id;
     const userRole = req.user.normalizedRole || req.user.role;
 
+    console.log('🔵 [CREATE COMPLAINT] User ID:', userId.toString(), 'Role:', userRole);
+
     // Check if user role is allowed to submit complaints
     const allowedRoles = ['resident_staff', 'warden', 'custodian'];
     if (!allowedRoles.includes(userRole)) {
+      console.warn('❌ [CREATE COMPLAINT] User role not authorized:', userRole);
       return res.status(403).json({
         success: false,
         message: 'Your role is not authorized to submit complaints',
@@ -72,6 +75,8 @@ export const createComplaint = async (req, res) => {
       userRole
     );
 
+    console.log('✅ [CREATE COMPLAINT] Created successfully:', complaint._id.toString());
+
     res.status(201).json({
       success: true,
       message: 'Complaint submitted successfully',
@@ -113,6 +118,8 @@ export const getMyComplaints = async (req, res) => {
     const startDate = req.query.startDate || '';
     const endDate = req.query.endDate || '';
 
+    console.log('🔵 [GET MY COMPLAINTS] User ID:', userId.toString(), 'Filters:', { status, category, timeRange, page, limit });
+
     const result = await complaintOperations.getUserComplaints(
       db,
       userId,
@@ -125,6 +132,8 @@ export const getMyComplaints = async (req, res) => {
       startDate,
       endDate
     );
+
+    console.log('✅ [GET MY COMPLAINTS] Found', result.complaints.length, 'complaints');
 
     res.status(200).json({
       success: true,
@@ -323,6 +332,8 @@ export const getAllComplaints = async (req, res) => {
     const status = req.query.status || 'all';
     const category = req.query.category || 'all';
     const timeRange = req.query.timeRange || 'all';
+    const startDate = req.query.startDate || '';
+    const endDate = req.query.endDate || '';
 
     const result = await complaintOperations.getAllComplaints(
       db,
@@ -330,7 +341,9 @@ export const getAllComplaints = async (req, res) => {
       limit,
       status,
       category,
-      timeRange
+      timeRange,
+      startDate,
+      endDate
     );
 
     res.status(200).json({

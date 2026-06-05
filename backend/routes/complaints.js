@@ -60,15 +60,6 @@ const updateStatusValidation = [
 // All routes require authentication
 router.use(protect);
 
-// Stats route (before :id routes)
-router.get('/stats', getComplaintStats);
-
-// My complaints route (before :id routes)
-router.get('/my-complaints', getMyComplaints);
-
-// Admin/Estates only - get all complaints
-router.get('/all', authorize('admin', 'estates_officer'), getAllComplaints);
-
 // Create complaint with file upload
 router.post(
   '/',
@@ -76,6 +67,15 @@ router.post(
   createComplaintValidation,
   createComplaint
 );
+
+// Stats route (MUST be before :id routes)
+router.get('/stats', getComplaintStats);
+
+// My complaints route (MUST be before :id routes)
+router.get('/my-complaints', getMyComplaints);
+
+// Admin/Estates only - get all complaints
+router.get('/all', authorize('admin', 'estates_officer'), getAllComplaints);
 
 // Routes with :id
 router.get('/:id', getComplaintById);

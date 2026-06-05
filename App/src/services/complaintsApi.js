@@ -63,12 +63,14 @@ const complaintService = {
         `/complaints/my-complaints?${queryString.toString()}`
       );
 
+      // Note: axios interceptor already returns response.data (the backend body)
+      // So 'response' here is actually: { success: true, count: 10, pagination: {...}, data: [...] }
       return {
-        success: true,
-        data: response.data?.data,
-        pagination: response.data?.pagination,
-        count: response.data?.count,
-        message: response.data?.message,
+        success: response.success,
+        data: response.data,
+        pagination: response.pagination,
+        count: response.count,
+        message: response.message,
       };
     } catch (error) {
       console.error('Fetch my complaints error:', error);
@@ -99,10 +101,11 @@ const complaintService = {
         `/complaints/stats?${queryString.toString()}`
       );
 
+      // axios interceptor already returns response.data
       return {
-        success: true,
-        data: response.data?.data,
-        message: response.data?.message,
+        success: response.success,
+        data: response.data,
+        message: response.message,
       };
     } catch (error) {
       console.error('Fetch complaint stats error:', error);

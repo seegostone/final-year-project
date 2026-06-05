@@ -13,6 +13,7 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
+  Trash2,
   //TrendingUp
 } from 'lucide-react';
 import Header from './Header';
@@ -223,6 +224,8 @@ export default function ComplaintDashboard() {
   const [notification, setNotification] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [expandedComplaintId, setExpandedComplaintId] = useState(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [complaintToDelete, setComplaintToDelete] = useState(null);
 
   const {
     values,
@@ -243,7 +246,7 @@ export default function ComplaintDashboard() {
   const filteredComplaints = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
 
-    return complaints.filter((complaint) => {
+    const result = complaints.filter((complaint) => {
       const matchesSearch =
         !normalizedSearch ||
         complaint.title.toLowerCase().includes(normalizedSearch) ||
@@ -255,6 +258,10 @@ export default function ComplaintDashboard() {
 
       return matchesSearch && matchesCategory;
     });
+    
+    console.log('🔵 [FILTERED COMPLAINTS] Total complaints:', complaints.length, 'Filtered:', result.length, 'Search:', searchQuery, 'Category:', categoryFilter);
+    
+    return result;
   }, [complaints, searchQuery, categoryFilter]);
 
   const refreshDashboardStats = useCallback(async (overrideTimeRange = null, overrideStartDate = undefined, overrideEndDate = undefined) => {
@@ -288,10 +295,18 @@ export default function ComplaintDashboard() {
           search: searchQuery,
         });
 
+        console.log('🔵 [REFRESH COMPLAINTS] API Result:', result);
+        console.log('🔵 [REFRESH COMPLAINTS] Result.success:', result.success);
+        console.log('🔵 [REFRESH COMPLAINTS] Result.data:', result.data);
+        console.log('🔵 [REFRESH COMPLAINTS] Result.data type:', typeof result.data, 'Is array:', Array.isArray(result.data));
+
         if (result.success) {
-          setComplaints(result.data || []);
+          const complaintsArray = result.data || [];
+          console.log('✅ [REFRESH COMPLAINTS] Setting complaints to:', complaintsArray.length, 'items');
+          setComplaints(complaintsArray);
           setPagination(result.pagination || { currentPage: 1, totalPages: 1 });
         } else {
+          console.warn('Failed to fetch complaints:', result);
           setComplaints([]);
           setPagination({ currentPage: 1, totalPages: 1 });
         }
@@ -394,6 +409,8 @@ export default function ComplaintDashboard() {
         setCustomEndDate('');
         setSearchQuery('');
         setPagination((prev) => ({ ...prev, currentPage: 1 }));
+        // Add delay to allow database write and state updates to complete
+        await new Promise((resolve) => setTimeout(resolve, 500));
         await refreshDashboardStats('all', '', '');
         await refreshComplaints(1, 'all', '', '');
       } else {
@@ -420,6 +437,33 @@ export default function ComplaintDashboard() {
         currentPage: Math.max(1, Math.min(prev.totalPages, nextPage)),
       };
     });
+  };
+
+  const handleDeleteComplaint = (complaintId) => {
+    setComplaintToDelete(complaintId);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!complaintToDelete) return;
+
+    try {
+      const result = await complaintService.deleteComplaint(complaintToDelete);
+      if (result.success) {
+        setNotification('Complaint deleted successfully');
+        setDeleteModalOpen(false);
+        setComplaintToDelete(null);
+        // Refresh the list
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        await refreshDashboardStats();
+        await refreshComplaints(pagination.currentPage);
+      } else {
+        setErrorMessage(result.error || 'Unable to delete complaint.');
+      }
+    } catch (error) {
+      console.error('Delete complaint error:', error);
+      setErrorMessage('An unexpected error occurred while deleting the complaint.');
+    }
   };
 
   return (
@@ -784,12 +828,13 @@ export default function ComplaintDashboard() {
                         <th className="px-6 py-3.5 font-semibold text-slate-700">Status</th>
                         <th className="px-6 py-3.5 font-semibold text-slate-700">Urgency</th>
                         <th className="px-6 py-3.5 font-semibold text-slate-700">Date</th>
+                        <th className="px-6 py-3.5 font-semibold text-slate-700">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {loading ? (
                         <tr>
-                          <td colSpan={5} className="px-6 py-12 text-center">
+                          <td colSpan={6} className="px-6 py-12 text-center">
                             <div className="flex flex-col items-center gap-3">
                               <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900"></div>
                               <p className="text-sm text-slate-600">Loading complaints...</p>
@@ -798,7 +843,7 @@ export default function ComplaintDashboard() {
                         </tr>
                       ) : filteredComplaints.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-6 py-12 text-center">
+                          <td colSpan={6} className="px-6 py-12 text-center">
                             <div className="flex flex-col items-center gap-3">
                               <div className="rounded-full bg-slate-100 p-3">
                                 <FileText className="h-6 w-6 text-slate-400" />
@@ -853,10 +898,22 @@ export default function ComplaintDashboard() {
                                 </span>
                               </td>
                               <td className="px-6 py-4 text-slate-600">{formatDate(complaint.createdAt)}</td>
+                              <td className="px-6 py-4">
+                                {complaint.status === 'pending' && (
+                                  <button
+                                    onClick={() => handleDeleteComplaint(complaint._id)}
+                                    className="inline-flex items-center gap-2 rounded-md bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
+                                    title="Delete pending complaint"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                    Delete
+                                  </button>
+                                )}
+                              </td>
                             </tr>
                             {expandedComplaintId === complaint._id && (
                               <tr className="bg-slate-50">
-                                <td colSpan={5} className="border-t border-slate-200 px-6 py-4">
+                                <td colSpan={6} className="border-t border-slate-200 px-6 py-4">
                                   <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                       <p className="text-sm font-semibold text-slate-900">History details</p>
@@ -930,6 +987,50 @@ export default function ComplaintDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white shadow-lg">
+            {/* Modal Header */}
+            <div className="border-b border-slate-200 bg-gradient-to-r from-red-50 to-orange-50 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-900">Delete Complaint</h2>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-6">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+                  <AlertCircle className="h-6 w-6 text-red-600" />
+                </div>
+                <p className="text-base font-medium text-slate-900">Are you sure?</p>
+              </div>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                This will permanently delete this complaint. This action cannot be undone.
+              </p>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setComplaintToDelete(null);
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
