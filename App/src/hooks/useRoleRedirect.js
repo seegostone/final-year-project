@@ -3,6 +3,13 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/api';
 
+// Normalize role to match backend storage (e.g., 'Resident Staff' -> 'resident_staff')
+const normalizeRole = (role) =>
+  String(role || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+
 export const useRoleRedirect = () => {
   const navigate = useNavigate();
   
@@ -10,17 +17,17 @@ export const useRoleRedirect = () => {
     const user = authService.getCurrentUserFromStorage();
     
     if (user) {
-      // Redirect submitter-type users to the shared complaint submission dashboard.
-      // Other roles have dedicated dashboards based on their responsibilities.
+      // Redirect based on normalized role (backend stores roles normalized)
       const roleRoutes = {
-        'Admin': '/admin/dashboard',
-        'Technician': '/technician/dashboard',
-        'Custodian': '/dashboard',
-        'Resident Staff': '/dashboard',
-        'Warden': '/dashboard',
+        'admin': '/admin/dashboard',
+        'technician': '/technician/dashboard',
+        'custodian': '/dashboard',
+        'resident_staff': '/dashboard',
+        'warden': '/dashboard',
       };
       
-      const redirectPath = roleRoutes[user.role] || '/dashboard';
+      const normalizedRole = normalizeRole(user.role);
+      const redirectPath = roleRoutes[normalizedRole] || '/dashboard';
       navigate(redirectPath);
     }
   }, [navigate]);
@@ -28,11 +35,13 @@ export const useRoleRedirect = () => {
 
 export const getRoleRedirectPath = (role) => {
   const roleRoutes = {
-    'Admin': '/admin/dashboard',
-    'Technician': '/technician/dashboard',
-    'Custodian': '/dashboard',
-    'Resident Staff': '/dashboard',
-    'Warden': '/dashboard',
+    'admin': '/admin/dashboard',
+    'technician': '/technician/dashboard',
+    'custodian': '/dashboard',
+    'resident_staff': '/dashboard',
+    'warden': '/dashboard',
   };
-  return roleRoutes[role] || '/dashboard';
+  
+  const normalizedRole = normalizeRole(role);
+  return roleRoutes[normalizedRole] || '/dashboard';
 };
