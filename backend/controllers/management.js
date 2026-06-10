@@ -290,7 +290,88 @@ export const assignComplaint = async (req, res) => {
       message: 'Complaint assigned successfully',
       data: complaint,
     });
-  } catch (error) {
+  };
+
+  // @desc    Create a task for a complaint
+  // @route   POST /api/management/:id/tasks
+  // @access  Private (Admin, Estates Officer)
+  export const createTask = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
+    }
+
+    try {
+      const db = req.app.locals.db;
+      const userId = req.user._id;
+      const userRole = req.user.normalizedRole || req.user.role;
+      const complaintId = req.params.id;
+      const { title, description, notes } = req.body;
+
+      console.log('🔵 [CREATE TASK] for complaint', complaintId, 'by', userId.toString());
+
+      const allowedRoles = ['admin', 'estates_officer'];
+      if (!allowedRoles.includes(userRole)) {
+        return res.status(403).json({ success: false, message: 'You do not have permission to create tasks' });
+      }
+
+      if (!ObjectId.isValid(complaintId)) {
+        return res.status(400).json({ success: false, message: 'Invalid complaint ID' });
+      }
+
+      const task = await managementOperations.addTaskToComplaint(db, complaintId, { title, description, notes }, userId);
+
+      if (!task) {
+        return res.status(404).json({ success: false, message: 'Complaint not found or task could not be created' });
+      }
+
+      res.status(201).json({ success: true, message: 'Task created', data: task });
+    } catch (error) {
+      console.error('Create task error:', error);
+      res.status(500).json({ success: false, message: 'Server error while creating task' });
+    }
+  };
+
+  // @desc    Assign a technician to a specific task
+  // @route   POST /api/management/:id/tasks/:taskId/assign
+  // @access  Private (Admin, Estates Officer)
+  export const assignTask = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
+    }
+
+    try {
+      const db = req.app.locals.db;
+      const userId = req.user._id;
+      const userRole = req.user.normalizedRole || req.user.role;
+      const complaintId = req.params.id;
+      const taskId = req.params.taskId;
+      const { technicianId, technicianName } = req.body;
+
+      console.log('🔵 [ASSIGN TASK]', taskId, 'for complaint', complaintId, 'to', technicianName);
+
+      const allowedRoles = ['admin', 'estates_officer'];
+      if (!allowedRoles.includes(userRole)) {
+        return res.status(403).json({ success: false, message: 'You do not have permission to assign tasks' });
+      }
+
+      if (!ObjectId.isValid(complaintId) || !ObjectId.isValid(taskId)) {
+        return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
+      }
+
+      const updated = await managementOperations.assignTaskToComplaint(db, complaintId, taskId, { technicianId, technicianName }, userId);
+
+      if (!updated) {
+        return res.status(404).json({ success: false, message: 'Task or complaint not found or cannot be assigned' });
+      }
+
+      res.status(200).json({ success: true, message: 'Task assigned', data: updated });
+    } catch (error) {
+      console.error('Assign task error:', error);
+      res.status(500).json({ success: false, message: 'Server error while assigning task' });
+    }
+  }; catch (error) {
     console.error('Assign complaint error:', error);
     res.status(500).json({
       success: false,

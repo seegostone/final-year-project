@@ -1006,6 +1006,83 @@ export const managementOperations = {
     return await complaints.findOne({ _id: new ObjectId(complaintId) });
   },
 
+  // Add a task to a complaint
+  async addTaskToComplaint(db, complaintId, taskData, createdBy) {
+    const complaints = db.collection('complaints');
+    const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
+    if (!complaint) return null;
+
+    const task = {
+      _id: new ObjectId(),
+      title: taskData.title || taskData.text || 'Task',
+      description: taskData.description || '',
+      status: 'open', // open, in_progress, done
+      createdBy: new ObjectId(createdBy),
+      createdAt: new Date(),
+      assigneeId: taskData.assigneeId ? new ObjectId(taskData.assigneeId) : null,
+      assigneeName: taskData.assigneeName || null,
+      assignedAt: taskData.assigneeId ? new Date() : null,
+      notes: taskData.notes || null,
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'task_created',
+      from: complaint.status,
+      to: complaint.status,
+      by: createdBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Task created: ${task.title}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $push: { tasks: task, history: historyEntry },
+        $set: { updatedAt: new Date() },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    // Return the created task (with _id)
+    return task;
+  },
+
+  // Assign a technician to a specific task inside a complaint
+  async assignTaskToComplaint(db, complaintId, taskId, assigneeData, assignedBy) {
+    const complaints = db.collection('complaints');
+    const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
+    if (!complaint) return null;
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId), 'tasks._id': new ObjectId(taskId) },
+      {
+        $set: {
+          'tasks.$.assigneeId': new ObjectId(assigneeData.technicianId),
+          'tasks.$.assigneeName': assigneeData.technicianName,
+          'tasks.$.assignedAt': new Date(),
+          updatedAt: new Date(),
+        },
+        $push: {
+          history: buildHistoryEntry({
+            action: 'task_assigned',
+            from: complaint.status,
+            to: complaint.status,
+            by: assignedBy,
+            byName: 'Estates Officer',
+            byRole: 'estates_officer',
+            note: `Task ${taskId} assigned to ${assigneeData.technicianName}`,
+          }),
+        },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
   // Get management queue (Phase 2)
   async getManagementQueue(
     db,

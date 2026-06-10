@@ -308,6 +308,59 @@ const managementService = {
     }
   },
 
+  // Create task for a complaint
+  async createTask(complaintId, data) {
+    try {
+      const response = await axiosInstance.post(
+        `/management/${complaintId}/tasks`,
+        data
+      );
+
+      return {
+        success: true,
+        data: response.data || response,
+        message: response.message,
+      };
+    } catch (error) {
+      console.error('Create task error:', error);
+      const formattedError = handleApiError(error);
+      return {
+        success: false,
+        error: formattedError.message,
+        type: formattedError.type,
+        status: error.status || 500,
+        validationErrors: formattedError.validationErrors,
+      };
+    }
+  },
+
+  // Assign a technician to a task
+  async assignTask(complaintId, taskId, data) {
+    try {
+      const response = await axiosInstance.post(
+        `/management/${complaintId}/tasks/${taskId}/assign`,
+        data
+      );
+
+      return {
+        success: true,
+        data: response.data || response,
+        message: response.message,
+      };
+    } catch (error) {
+      console.error('Assign task error:', error);
+      const formattedError = handleApiError(error);
+      return {
+        success: false,
+        error: formattedError.message,
+        type: formattedError.type,
+        status: error.status || 500,
+        validationErrors: formattedError.validationErrors,
+      };
+    }
+  },
+
+
   // Close complaint
   async closeComplaint(complaintId, data) {
     try {

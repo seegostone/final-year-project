@@ -41,14 +41,31 @@ export default function TasksPage() {
     setShowAssign(false);
   }
 
-  function addTask(complaintId) {
+  async function addTask(complaintId) {
     if (!newTaskText.trim()) return;
-    setTasksMap((m) => {
-      const prev = m[complaintId] || [];
-      return { ...m, [complaintId]: [...prev, { id: Date.now(), text: newTaskText.trim(), status: 'open' }] };
-    });
-    setNewTaskText('');
-  }
+      try {
+        const payload = { title: newTaskText.trim(), description: '' };
+        const result = await managementService.createTask(complaintId, payload);
+        if (result.success) {
+          const created = result.data || result;
+          const serverTask = {
+            id: created._id || created.id || Date.now(),
+            text: created.title || created.text || newTaskText.trim(),
+            status: created.status || 'open',
+          };
+          setTasksMap((m) => {
+            const prev = m[complaintId] || [];
+            return { ...m, [complaintId]: [...prev, serverTask] };
+          });
+          setNewTaskText('');
+        } else {
+          alert(result.error || 'Failed to create task');
+        }
+      } catch (err) {
+        console.error('Create task failed', err);
+        alert('Failed to create task');
+      }
+    }
 
   return (
     <div>

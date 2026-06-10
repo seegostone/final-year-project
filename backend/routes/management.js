@@ -5,6 +5,8 @@ import {
   triageComplaint,
   defineScopeComplaint,
   assignComplaint,
+  createTask,
+  assignTask,
   getManagementQueue,
   getDashboardStats,
   performQualityCheck,
@@ -183,6 +185,26 @@ const closeValidation = [
     .withMessage('Actual cost must be a positive number'),
 ];
 
+const createTaskValidation = [
+  param('id').isMongoId().withMessage('Invalid complaint ID'),
+  body('title').optional().isString().withMessage('Invalid task title'),
+  body('description').optional().isString().withMessage('Invalid task description'),
+];
+
+const assignTaskValidation = [
+  param('id').isMongoId().withMessage('Invalid complaint ID'),
+  param('taskId').isMongoId().withMessage('Invalid task ID'),
+  body('technicianId')
+    .notEmpty()
+    .isMongoId()
+    .withMessage('Technician ID is required and must be valid'),
+  body('technicianName')
+    .notEmpty()
+    .isString()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Technician name must be between 2 and 100 characters'),
+];
+
 // All routes require authentication
 router.use(protect);
 
@@ -198,6 +220,9 @@ router.post('/:id/scope', defineScopeValidation, defineScopeComplaint);
 
 // Assignment endpoint
 router.post('/:id/assign', assignComplaintValidation, assignComplaint);
+// Task endpoints
+router.post('/:id/tasks', createTaskValidation, createTask);
+router.post('/:id/tasks/:taskId/assign', assignTaskValidation, assignTask);
 
 // Queue & Dashboard
 router.get('/queue', getManagementQueue);
