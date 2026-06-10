@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import complaintService from '../services/complaintsApi';
+import managementService from '../services/managementApi';
 import AssignModal from './management/modals/AssignModal';
+import TaskAssignModal from './TaskAssignModal';
 
 export default function TasksPage() {
   const [complaints, setComplaints] = useState([]);
@@ -19,13 +21,30 @@ export default function TasksPage() {
     try {
       const result = await complaintService.getMyComplaints({ page: 1, limit: 50 });
       if (result.success) {
-        setComplaints(result.data || []);
+        const complaintsArray = result.data || [];
+        setComplaints(complaintsArray);
+
+        // Build tasks map from server data
+        const map = {};
+        complaintsArray.forEach((c) => {
+          const key = c._id || c.complaintId || c.id;
+          const tasks = (c.tasks || []).map((t) => ({
+            id: t._id || t.id || Date.now(),
+            text: t.title || t.text || '',
+            status: t.status || 'open',
+            assigneeName: t.assigneeName || t.assigneeName || null,
+          }));
+          map[key] = tasks;
+        });
+        setTasksMap(map);
       } else {
         setComplaints([]);
+        setTasksMap({});
       }
     } catch (err) {
       console.error('Failed to load complaints for tasks view', err);
       setComplaints([]);
+      setTasksMap({});
     } finally {
       setLoading(false);
     }
@@ -39,6 +58,19 @@ export default function TasksPage() {
   function closeAssign() {
     setSelectedComplaint(null);
     setShowAssign(false);
+  }
+
+  const [taskAssignOpen, setTaskAssignOpen] = useState(false);
+  const [taskAssignContext, setTaskAssignContext] = useState({ complaintId: null, taskId: null });
+
+  function openTaskAssign(complaintId, taskId) {
+    setTaskAssignContext({ complaintId, taskId });
+    setTaskAssignOpen(true);
+  }
+
+  function closeTaskAssign() {
+    setTaskAssignOpen(false);
+    setTaskAssignContext({ complaintId: null, taskId: null });
   }
 
   async function addTask(complaintId) {
@@ -124,18 +156,24 @@ export default function TasksPage() {
                       <div className="text-sm text-slate-500">No tasks yet — create one below.</div>
                     ) : (
                       <ul className="space-y-2">
-                        {(tasksMap[c.complaintId || c.id] || []).map((t) => (
+                        {(tasksMap[c._id || c.complaintId || c.id] || []).map((t) => (
                           <li key={t.id} className="flex items-center justify-between bg-white border border-slate-100 rounded p-2">
-                            <div className="text-sm">{t.text}</div>
-                            <div className="text-xs text-slate-500">{t.status}</div>
-                          </li>
-                        ))}
+                                                    <div>
+                                                      <div className="text-sm">{t.text}</div>
+                                                      {t.assigneeName && <div className="text-xs text-slate-500">Assigned to: {t.assigneeName}</div>}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                      <div className="text-xs text-slate-500">{t.status}</div>
+                                                      <button onClick={() => openTaskAssign(c._id || c.complaintId || c.id, t.id)} className="px-2 py-1 text-sm rounded border border-slate-200 bg-white hover:bg-slate-50">Assign</button>
+                                                    </div>
+                                                  </li>
+                                                ))}
                       </ul>
                     )}
 
                     <div className="mt-3 flex gap-2">
                       <input value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} placeholder="New task description" className="flex-1 px-3 py-2 border border-slate-200 rounded" />
-                      <button onClick={() => addTask(c.complaintId || c.id)} className="px-3 py-2 bg-blue-600 text-white rounded">Add</button>
+                                          <button onClick={() => addTask(c._id || c.complaintId || c.id)} className="px-3 py-2 bg-blue-600 text-white rounded">Add</button>
                     </div>
                   </div>
                 </div>
@@ -148,6 +186,15 @@ export default function TasksPage() {
       {showAssign && selectedComplaint && (
         <AssignModal complaint={selectedComplaint} onClose={closeAssign} onSuccess={() => { closeAssign(); refresh(); }} />
       )}
+
+            {taskAssignOpen && taskAssignContext.complaintId && taskAssignContext.taskId && (
+              <TaskAssignModal
+                complaintId={taskAssignContext.complaintId}
+                taskId={taskAssignContext.taskId}
+                onClose={closeTaskAssign}
+                onSuccess={() => { closeTaskAssign(); refresh(); }}
+              />
+            )}
     </div>
   );
 }
