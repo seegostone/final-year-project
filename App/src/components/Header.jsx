@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, LogOut, Building2 } from 'lucide-react';
+import { ChevronDown, LogOut, Building2, Menu } from 'lucide-react';
 import authService from '../services/api';
 
-export default function Header({ showAuth = false }) {
+export default function Header({ showAuth = false, onHamburgerClick = () => {} }) {
   const [open, setOpen] = useState(false);
   const [user] = useState(() => authService.getCurrentUserFromStorage());
   const ref = useRef();
@@ -27,6 +27,11 @@ export default function Header({ showAuth = false }) {
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 md:gap-0">
         {/* Logo Section */}
         <div className="flex items-center gap-3">
+          {/* Mobile hamburger */}
+          <button onClick={onHamburgerClick} className="md:hidden p-2 rounded-md mr-1">
+            <Menu className="h-5 w-5 text-slate-700" />
+          </button>
+
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50">
             <Building2 className="h-5 w-5 text-green-700" />
           </div>

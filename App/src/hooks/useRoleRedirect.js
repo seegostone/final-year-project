@@ -20,6 +20,7 @@ export const useRoleRedirect = () => {
       // Redirect based on normalized role (backend stores roles normalized)
       const roleRoutes = {
         'admin': '/admin/dashboard',
+        'estates_officer': '/admin/dashboard',
         'technician': '/technician/dashboard',
         'custodian': '/dashboard',
         'resident_staff': '/dashboard',
@@ -36,6 +37,7 @@ export const useRoleRedirect = () => {
 export const getRoleRedirectPath = (role) => {
   const roleRoutes = {
     'admin': '/admin/dashboard',
+    'estates_officer': '/admin/dashboard',
     'technician': '/technician/dashboard',
     'custodian': '/dashboard',
     'resident_staff': '/dashboard',

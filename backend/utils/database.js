@@ -816,3 +816,809 @@ export const complaintOperations = {
     return result.deletedCount > 0;
   },
 };
+
+// Management operations (for Estates Officer/Admin features)
+export const managementOperations = {
+  // Validate complaint (Phase 1)
+  async validateComplaint(db, complaintId, validationData) {
+    const complaints = db.collection('complaints');
+
+    // Query by MongoDB _id (ObjectId), consistent with your existing pattern
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    const updateFields = {
+      status: 'analyzed',
+      validationNotes: validationData.validationNotes,
+      validatedBy: new ObjectId(validationData.validatedBy),
+      validatedAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'validated',
+      from: complaint.status,
+      to: 'analyzed',
+      by: validationData.validatedBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: validationData.validationNotes || 'Complaint validated',
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Triage complaint (Phase 1)
+  async triageComplaint(db, complaintId, triageData) {
+    const complaints = db.collection('complaints');
+
+    // Query by MongoDB _id (ObjectId)
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    // Calculate SLA deadline based on priority
+    const slaTiers = {
+      CRITICAL: 1,    // 1 day
+      HIGH: 2,        // 2 days
+      MEDIUM: 5,      // 5 days
+      LOW: 10,        // 10 days
+    };
+
+    const slaDays = slaTiers[triageData.priority] || 5;
+    const slaDeadline = new Date(
+      Date.now() + slaDays * 24 * 60 * 60 * 1000
+    );
+
+    const updateFields = {
+      status: 'triaged',
+      priority: triageData.priority,
+      slaDeadline,
+      updatedAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'triaged',
+      from: complaint.status,
+      to: 'triaged',
+      by: triageData.triageBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Priority: ${triageData.priority}. ${triageData.triageNotes || ''}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Define scope for complaint (Phase 1)
+  async defineScopeComplaint(db, complaintId, scopeData) {
+    const complaints = db.collection('complaints');
+
+    // Query by MongoDB _id (ObjectId)
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    const updateFields = {
+      status: 'scope_defined',
+      'scopeDefinition.description': scopeData.scopeDescription,
+      'scopeDefinition.estimatedDuration': scopeData.estimatedDuration || 2,
+      'scopeDefinition.requiredSkills': scopeData.requiredSkills || [],
+      'scopeDefinition.estimatedCost': scopeData.estimatedCost || 0,
+      'scopeDefinition.dependencies': scopeData.dependencies?.map(
+        (id) => new ObjectId(id)
+      ) || [],
+      updatedAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'scope_defined',
+      from: complaint.status,
+      to: 'scope_defined',
+      by: scopeData.definedBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Scope: ${scopeData.scopeDescription}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Assign complaint to technician (Phase 2)
+  async assignComplaint(db, complaintId, assignmentData) {
+    const complaints = db.collection('complaints');
+
+    // Query by MongoDB _id (ObjectId)
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    // Validate that complaint is ready for assignment
+    if (!['scope_defined', 'triaged'].includes(complaint.status)) {
+      return null;
+    }
+
+    const updateFields = {
+      status: 'assigned',
+      'assignment.technicianId': new ObjectId(assignmentData.technicianId),
+      'assignment.technicianName': assignmentData.technicianName,
+      'assignment.assignedBy': assignmentData.assignedBy,
+      'assignment.assignedAt': new Date(),
+      'assignment.confirmed': false,
+      updatedAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'assigned',
+      from: complaint.status,
+      to: 'assigned',
+      by: assignmentData.assignedBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Assigned to: ${assignmentData.technicianName || 'Technician'}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Add a task to a complaint
+  async addTaskToComplaint(db, complaintId, taskData, createdBy) {
+    const complaints = db.collection('complaints');
+    const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
+    if (!complaint) return null;
+
+    const task = {
+      _id: new ObjectId(),
+      title: taskData.title || taskData.text || 'Task',
+      description: taskData.description || '',
+      status: 'open', // open, in_progress, done
+      createdBy: new ObjectId(createdBy),
+      createdAt: new Date(),
+      assigneeId: taskData.assigneeId ? new ObjectId(taskData.assigneeId) : null,
+      assigneeName: taskData.assigneeName || null,
+      assignedAt: taskData.assigneeId ? new Date() : null,
+      notes: taskData.notes || null,
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'task_created',
+      from: complaint.status,
+      to: complaint.status,
+      by: createdBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Task created: ${task.title}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $push: { tasks: task, history: historyEntry },
+        $set: { updatedAt: new Date() },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    // Return the created task (with _id)
+    return task;
+  },
+
+  // Assign a technician to a specific task inside a complaint
+  async assignTaskToComplaint(db, complaintId, taskId, assigneeData, assignedBy) {
+    const complaints = db.collection('complaints');
+    const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
+    if (!complaint) return null;
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId), 'tasks._id': new ObjectId(taskId) },
+      {
+        $set: {
+          'tasks.$.assigneeId': new ObjectId(assigneeData.technicianId),
+          'tasks.$.assigneeName': assigneeData.technicianName,
+          'tasks.$.assignedAt': new Date(),
+          updatedAt: new Date(),
+        },
+        $push: {
+          history: buildHistoryEntry({
+            action: 'task_assigned',
+            from: complaint.status,
+            to: complaint.status,
+            by: assignedBy,
+            byName: 'Estates Officer',
+            byRole: 'estates_officer',
+            note: `Task ${taskId} assigned to ${assigneeData.technicianName}`,
+          }),
+        },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Get management queue (Phase 2)
+  async getManagementQueue(
+    db,
+    page = 1,
+    limit = 10,
+    priorityFilter = 'all',
+    statusFilter = 'triaged'
+  ) {
+    const complaints = db.collection('complaints');
+    const skip = (page - 1) * limit;
+
+    const query = {};
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      query.status = statusFilter;
+    }
+    // When 'all' is selected, show all statuses (no status filter applied)
+
+    // Filter by priority
+    if (priorityFilter !== 'all') {
+      query.priority = priorityFilter;
+    }
+
+    const total = await complaints.countDocuments(query);
+    const complaintsList = await complaints
+      .find(query)
+      .sort({ slaDeadline: 1, priority: 1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    return {
+      complaints: complaintsList,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
+        totalComplaints: total,
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      },
+    };
+  },
+
+  // Get dashboard stats (Phase 2)
+  async getDashboardStats(db, timeRange = 'all') {
+    const complaints = db.collection('complaints');
+
+    const createdAtFilter = buildCreatedAtFilter(timeRange, null, null);
+    const query = createdAtFilter ? { createdAt: createdAtFilter } : {};
+
+    const pipeline = [
+      Object.keys(query).length ? { $match: query } : { $match: {} },
+      {
+        $facet: {
+          totalComplaints: [{ $count: 'count' }],
+          byPriority: [
+            {
+              $group: {
+                _id: '$priority',
+                count: { $sum: 1 },
+              },
+            },
+          ],
+          byStatus: [
+            {
+              $group: {
+                _id: '$status',
+                count: { $sum: 1 },
+              },
+            },
+          ],
+          slaBreach: [
+            {
+              $match: {
+                slaDeadline: { $lt: new Date() },
+                status: { $nin: ['closed'] },
+              },
+            },
+            { $count: 'count' },
+          ],
+          avgTimeToResolve: [
+            {
+              $match: { resolvedAt: { $exists: true } },
+            },
+            {
+              $group: {
+                _id: null,
+                avgTime: {
+                  $avg: {
+                    $divide: [
+                      { $subtract: ['$resolvedAt', '$createdAt'] },
+                      1000 * 60 * 60, // Convert to hours
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const result = await complaints.aggregate(pipeline).toArray();
+    const stats = result[0] || {};
+
+    // Build priority breakdown
+    const priorityBreakdown = {};
+    if (stats.byPriority) {
+      stats.byPriority.forEach((item) => {
+        priorityBreakdown[item._id || 'unset'] = item.count;
+      });
+    }
+
+    // Build status breakdown
+    const statusBreakdown = {};
+    if (stats.byStatus) {
+      stats.byStatus.forEach((item) => {
+        statusBreakdown[item._id || 'unset'] = item.count;
+      });
+    }
+
+    return {
+      totalComplaints: stats.totalComplaints[0]?.count || 0,
+      priorityBreakdown,
+      statusBreakdown,
+      slaBreach: stats.slaBreach[0]?.count || 0,
+      avgTimeToResolveHours: stats.avgTimeToResolve[0]?.avgTime || 0,
+      timestamp: new Date(),
+    };
+  },
+
+  // Perform quality check (Phase 4)
+  async performQualityCheck(db, complaintId, checkData) {
+    const complaints = db.collection('complaints');
+
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    let nextStatus = complaint.status;
+    if (checkData.qualityStatus === 'PASSED') {
+      nextStatus = 'ready_for_validation';
+    } else if (checkData.qualityStatus === 'FAILED') {
+      nextStatus = 'rework_required';
+    }
+
+    const updateFields = {
+      status: nextStatus,
+      'qualityCheck.checkedBy': new ObjectId(checkData.checkedBy),
+      'qualityCheck.checkedAt': new Date(),
+      'qualityCheck.status': checkData.qualityStatus,
+      'qualityCheck.notes': checkData.checkNotes,
+      'qualityCheck.photos': checkData.photos || [],
+      updatedAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'quality_checked',
+      from: complaint.status,
+      to: nextStatus,
+      by: checkData.checkedBy,
+      byName: 'Quality Officer',
+      byRole: 'estates_officer',
+      note: `Quality check: ${checkData.qualityStatus}. ${checkData.checkNotes || ''}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Schedule resident inspection (Phase 4)
+  async scheduleInspection(db, complaintId, inspectionData) {
+    const complaints = db.collection('complaints');
+
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    const updateFields = {
+      'residentValidation.scheduledFor': new Date(inspectionData.scheduledFor),
+      updatedAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'inspection_scheduled',
+      from: complaint.status,
+      to: complaint.status,
+      by: inspectionData.scheduledBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Inspection scheduled for ${inspectionData.scheduledFor}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Record resident approval (Phase 4)
+  async recordResidentApproval(db, complaintId, approvalData) {
+    const complaints = db.collection('complaints');
+
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    let nextStatus = complaint.status;
+    if (approvalData.approvalStatus === 'ACCEPTED') {
+      nextStatus = 'validated';
+    } else if (approvalData.approvalStatus === 'REJECTED') {
+      nextStatus = 'rework_required';
+    }
+
+    const updateFields = {
+      status: nextStatus,
+      'residentValidation.completedAt': new Date(),
+      'residentValidation.approvedBy': new ObjectId(approvalData.approvedBy),
+      'residentValidation.status': approvalData.approvalStatus,
+      'residentValidation.feedback': approvalData.feedback || '',
+      'residentValidation.satisfactionRating': approvalData.satisfactionRating || 0,
+      updatedAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'resident_approval',
+      from: complaint.status,
+      to: nextStatus,
+      by: approvalData.approvedBy,
+      byName: 'Resident',
+      byRole: 'resident',
+      note: `${approvalData.approvalStatus}. Rating: ${approvalData.satisfactionRating}/5. ${approvalData.feedback || ''}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Request rework (Phase 5)
+  async requestRework(db, complaintId, reworkData) {
+    const complaints = db.collection('complaints');
+
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    // Check rework count
+    const reworkCount = complaint.reworkCount || 0;
+    if (reworkCount >= 2) {
+      // Max rework cycles reached - auto escalate
+      return null;
+    }
+
+    const updateFields = {
+      status: 'rework_required',
+      reworkCount: reworkCount + 1,
+      updatedAt: new Date(),
+    };
+
+    const reworkEntry = {
+      reworkRound: reworkCount + 1,
+      reason: reworkData.reworkReason,
+      createdAt: new Date(),
+      feedback: reworkData.reworkDetails,
+      status: 'IN_PROGRESS',
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'rework_requested',
+      from: complaint.status,
+      to: 'rework_required',
+      by: reworkData.requestedBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Rework round ${reworkCount + 1}: ${reworkData.reworkReason}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: {
+          history: historyEntry,
+          reworkHistory: reworkEntry,
+        },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Escalate complaint (Phase 6)
+  async escalateComplaint(db, complaintId, escalationData) {
+    const complaints = db.collection('complaints');
+
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    const updateFields = {
+      'escalation.status': 'ESCALATED',
+      'escalation.escalatedTo': new ObjectId(escalationData.escalateTo),
+      'escalation.escalatedAt': new Date(),
+      'escalation.reason': escalationData.escalationReason,
+      updatedAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'escalated',
+      from: complaint.status,
+      to: complaint.status,
+      by: escalationData.escalatedBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Escalated: ${escalationData.escalationReason}. ${escalationData.escalationDetails || ''}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Close complaint (Phase 5)
+  async closeComplaint(db, complaintId, closureData) {
+    const complaints = db.collection('complaints');
+
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    // Calculate time to resolve
+    const timeToResolveMs = new Date() - complaint.createdAt;
+    const timeToResolveDays = timeToResolveMs / (1000 * 60 * 60 * 24);
+
+    // Check SLA compliance
+    const slaMetCompliance = !complaint.slaDeadline ||
+      new Date() <= complaint.slaDeadline;
+
+    const updateFields = {
+      status: 'closed',
+      closedBy: new ObjectId(closureData.closedBy),
+      closedAt: new Date(),
+      'closureReport.summary': closureData.closureSummary || '',
+      'closureReport.preventiveRecommendations':
+        closureData.preventiveRecommendations || [],
+      'closureReport.costActual': closureData.costActual || 0,
+      'closureReport.timeToResolve': timeToResolveDays,
+      'metrics.slaMetCompliance': slaMetCompliance,
+      'metrics.totalHandlingTime': timeToResolveMs / (1000 * 60 * 60),
+      updatedAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'closed',
+      from: complaint.status,
+      to: 'closed',
+      by: closureData.closedBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Closed: ${closureData.closureSummary || 'Complaint resolved'}. SLA Compliant: ${slaMetCompliance}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Get analytics (Phase 5)
+  async getAnalytics(db, timeRange = 'thismonth') {
+    const complaints = db.collection('complaints');
+
+    const createdAtFilter = buildCreatedAtFilter(timeRange, null, null);
+    const query = createdAtFilter ? { createdAt: createdAtFilter } : {};
+
+    const pipeline = [
+      Object.keys(query).length ? { $match: query } : { $match: {} },
+      {
+        $facet: {
+          summary: [
+            {
+              $group: {
+                _id: null,
+                totalComplaints: { $sum: 1 },
+                resolvedComplaints: {
+                  $sum: {
+                    $cond: [{ $eq: ['$status', 'closed'] }, 1, 0],
+                  },
+                },
+                avgSatisfaction: {
+                  $avg: '$residentValidation.satisfactionRating',
+                },
+                avgHandlingTimeHours: {
+                  $avg: {
+                    $divide: [
+                      {
+                        $subtract: [
+                          {
+                            $cond: [
+                              '$resolvedAt',
+                              '$resolvedAt',
+                              new Date(),
+                            ],
+                          },
+                          '$createdAt',
+                        ],
+                      },
+                      1000 * 60 * 60,
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+          priorityStats: [
+            {
+              $group: {
+                _id: '$priority',
+                count: { $sum: 1 },
+                resolved: {
+                  $sum: {
+                    $cond: [{ $eq: ['$status', 'closed'] }, 1, 0],
+                  },
+                },
+              },
+            },
+          ],
+          categoryStats: [
+            {
+              $group: {
+                _id: '$category',
+                count: { $sum: 1 },
+                resolved: {
+                  $sum: {
+                    $cond: [{ $eq: ['$status', 'closed'] }, 1, 0],
+                  },
+                },
+              },
+            },
+          ],
+          slaPerformance: [
+            {
+              $group: {
+                _id: null,
+                totalSLAComplaints: {
+                  $sum: {
+                    $cond: [
+                      { $ne: ['$metrics.slaMetCompliance', null] },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                slaCompliant: {
+                  $sum: {
+                    $cond: ['$metrics.slaMetCompliance', 1, 0],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const result = await complaints.aggregate(pipeline).toArray();
+    const stats = result[0] || {};
+
+    // Calculate SLA percentage
+    const slaPerf = stats.slaPerformance[0] || {};
+    const slaPercentage =
+      slaPerf.totalSLAComplaints > 0
+        ? ((slaPerf.slaCompliant / slaPerf.totalSLAComplaints) * 100).toFixed(2)
+        : 0;
+
+    return {
+      summary: stats.summary[0] || {
+        totalComplaints: 0,
+        resolvedComplaints: 0,
+        avgSatisfaction: 0,
+        avgHandlingTimeHours: 0,
+      },
+      priorityStats: stats.priorityStats || [],
+      categoryStats: stats.categoryStats || [],
+      slaPercentage: parseFloat(slaPercentage),
+      timeRange,
+      generatedAt: new Date(),
+    };
+  },
+};

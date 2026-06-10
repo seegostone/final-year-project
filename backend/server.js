@@ -98,6 +98,7 @@ app.use(morgan(morganFormat, { stream: morganStream }));
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import complaintRoutes from './routes/complaints.js';
+import managementRoutes from './routes/management.js';
 
 // Routes
 const attachDb = (req, res, next) => {
@@ -113,6 +114,7 @@ const attachDb = (req, res, next) => {
 app.use('/api/auth', attachDb, authRoutes);
 app.use('/api/users', attachDb, userRoutes);
 app.use('/api/complaints', attachDb, complaintRoutes);
+app.use('/api/management', attachDb, managementRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
