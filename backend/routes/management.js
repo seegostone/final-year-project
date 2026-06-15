@@ -17,6 +17,7 @@ import {
   closeComplaint,
   getAnalytics,
   getTechnicians,
+  updateTaskStatus
 } from '../controllers/management.js';
 import { protect, authorize } from '../middleware/auth.js';
 
@@ -34,6 +35,17 @@ const validateComplaintValidation = [
     .isBoolean()
     .withMessage('Invalid legitimate value'),
 ];
+// Validation rules
+const updateTaskStatusValidation = [
+  param('id').isMongoId().withMessage('Invalid complaint ID'),
+  param('taskId').isMongoId().withMessage('Invalid task ID'),
+  body('status')
+    .notEmpty()
+    .isIn(['open', 'in_progress', 'done', 'blocked'])
+    .withMessage('Status must be one of: open, in_progress, done, blocked'),
+  body('notes').optional().isString().withMessage('Notes must be a string'),
+];
+
 
 const triageComplaintValidation = [
   param('id').isMongoId().withMessage('Invalid complaint ID'),
@@ -184,12 +196,28 @@ const closeValidation = [
     .isFloat({ min: 0 })
     .withMessage('Actual cost must be a positive number'),
 ];
-
 const createTaskValidation = [
   param('id').isMongoId().withMessage('Invalid complaint ID'),
-  body('title').optional().isString().withMessage('Invalid task title'),
-  body('description').optional().isString().withMessage('Invalid task description'),
+  body('title').notEmpty().withMessage('Task title is required').isString(),
+  body('description').optional().isString(),
+  body('priority')
+    .optional()
+    .isIn(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'])
+    .withMessage('Priority must be LOW, MEDIUM, HIGH, or CRITICAL'),
+  body('estimatedDurationDays')
+    .notEmpty()
+    .withMessage('Estimated duration (in days) is required')
+    .isFloat({ min: 0.25 })
+    .withMessage('Duration must be at least 0.25 days'),
+  body('startDate')
+    .optional()
+    .isISO8601()
+    .withMessage('Start date must be a valid ISO 8601 date'),
+  body('notes').optional().isString(),
+  body('assigneeId').optional().isMongoId().withMessage('Invalid assignee ID'),
+  body('assigneeName').optional().isString(),
 ];
+
 
 const assignTaskValidation = [
   param('id').isMongoId().withMessage('Invalid complaint ID'),
@@ -223,7 +251,7 @@ router.post('/:id/assign', assignComplaintValidation, assignComplaint);
 // Task endpoints
 router.post('/:id/tasks', createTaskValidation, createTask);
 router.post('/:id/tasks/:taskId/assign', assignTaskValidation, assignTask);
-
+router.patch('/:id/tasks/:taskId/status', updateTaskStatusValidation, updateTaskStatus);
 // Queue & Dashboard
 router.get('/queue', getManagementQueue);
 

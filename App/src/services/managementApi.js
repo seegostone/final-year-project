@@ -100,6 +100,25 @@ const managementService = {
     }
   },
 
+
+
+
+  async updateTaskStatus(complaintId, taskId, data) {
+  try {
+    const response = await axiosInstance.patch(
+      `/management/${complaintId}/tasks/${taskId}/status`,
+      data
+    );
+    return { success: true, data: response.data || response, message: response.message };
+  } catch (error) {
+    console.error('Update task status error:', error);
+    const formattedError = handleApiError(error);
+    return { success: false, error: formattedError.message, type: formattedError.type };
+  }
+},
+
+
+
   // Triage complaint
   async triageComplaint(complaintId, data) {
     try {

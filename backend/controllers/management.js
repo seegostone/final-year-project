@@ -290,7 +290,65 @@ export const assignComplaint = async (req, res) => {
       message: 'Complaint assigned successfully',
       data: complaint,
     });
-  };
+  } catch (error) {
+    console.error('Assign complaint error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while assigning complaint',
+    });
+  }
+};
+
+
+
+
+
+
+// ── updateTaskStatus controller ──────────────────────────────
+// @desc    Update task status (open / in_progress / done / blocked)
+// @route   PATCH /api/management/:id/tasks/:taskId/status
+// @access  Private (Admin, Estates Officer)
+
+export const updateTaskStatus = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
+  }
+
+  try {
+    const db = req.app.locals.db;
+    const userId = req.user._id;
+    const userRole = req.user.normalizedRole || req.user.role;
+    const { id: complaintId, taskId } = req.params;
+    const { status, notes } = req.body;
+
+    const allowedRoles = ['admin', 'estates_officer'];
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({ success: false, message: 'Permission denied' });
+    }
+
+    if (!ObjectId.isValid(complaintId) || !ObjectId.isValid(taskId)) {
+      return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
+    }
+
+    const updated = await managementOperations.updateTaskStatus(
+      db, complaintId, taskId, { status, notes }, userId
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Task or complaint not found' });
+    }
+
+    res.status(200).json({ success: true, message: 'Task status updated', data: updated });
+  } catch (error) {
+    console.error('Update task status error:', error);
+    res.status(500).json({ success: false, message: 'Server error while updating task status' });
+  }
+};
+
+
+
+
 
   // @desc    Create a task for a complaint
   // @route   POST /api/management/:id/tasks
@@ -371,14 +429,7 @@ export const assignComplaint = async (req, res) => {
       console.error('Assign task error:', error);
       res.status(500).json({ success: false, message: 'Server error while assigning task' });
     }
-  }; catch (error) {
-    console.error('Assign complaint error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while assigning complaint',
-    });
-  }
-};
+  };
 
 // @desc    Get complaint management queue
 // @route   GET /api/management/queue
@@ -931,6 +982,10 @@ export const getAnalytics = async (req, res) => {
     });
   }
 };
+
+
+
+
 
 // @desc    Get list of technicians
 // @route   GET /api/management/technicians

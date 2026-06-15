@@ -1,260 +1,3 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  Zap,
-  TrendingUp,
-  Filter,
-  Search,
-  Plus,
-  ChevronRight,
-  AlertTriangle,
-  Eye,
-  Edit,
-} from 'lucide-react';
-import Layout from './Layout';
-import ManagementQueue from './management/ManagementQueue';
-import DashboardStats from './management/DashboardStats';
-import ComplaintDetailModal from './management/ComplaintDetailModal';
-import AssignModal from './management/modals/AssignModal';
-import ValidateModal from './management/modals/ValidateModal';
-import TriageModal from './management/modals/TriageModal';
-import ScopeModal from './management/modals/ScopeModal';
-import QualityCheckModal from './management/modals/QualityCheckModal';
-import ScheduleInspectionModal from './management/modals/ScheduleInspectionModal';
-import ResidentApprovalModal from './management/modals/ResidentApprovalModal';
-import EscalateModal from './management/modals/EscalateModal';
-import CloseComplaintModal from './management/modals/CloseComplaintModal';
-import ReworkModal from './management/modals/ReworkModal';
-import managementService from '../services/managementApi';
-
-const statusOptions = [
-  { value: 'all', label: 'All Statuses' },
-  { value: 'received', label: 'Received' },
-  { value: 'analyzed', label: 'Analyzed' },
-  { value: 'triaged', label: 'Triaged' },
-  { value: 'scope_defined', label: 'Scope Defined' },
-  { value: 'assigned', label: 'Assigned' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'work_completed', label: 'Work Completed' },
-  { value: 'ready_for_validation', label: 'Ready for Validation' },
-  { value: 'validated', label: 'Validated' },
-  { value: 'closed', label: 'Closed' },
-];
-
-const priorityOptions = [
-  { value: 'all', label: 'All Priorities' },
-  { value: 'CRITICAL', label: 'Critical', color: 'bg-red-100 text-red-800 border-red-200' },
-  { value: 'HIGH', label: 'High', color: 'bg-orange-100 text-orange-800 border-orange-200' },
-  { value: 'MEDIUM', label: 'Medium', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-  { value: 'LOW', label: 'Low', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-];
-
-export default function EstatesOfficerDashboard() {
-  // UI State
-  const [activeTab, setActiveTab] = useState('queue'); // queue, overdue, rework
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-
-  // Data State
-  const [complaints, setComplaints] = useState([]);
-  const [stats, setStats] = useState({
-    totalComplaints: 0,
-    priorityBreakdown: {},
-    statusBreakdown: {},
-    slaBreach: 0,
-    avgTimeToResolveHours: 0,
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  // Selected complaint & modal state
-  const [selectedComplaint, setSelectedComplaint] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [modalState, setModalState] = useState({
-    type: null, // validate, triage, scope, assign, etc.
-    visible: false,
-  });
-
-  // Load queue data
-  const loadQueue = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const result = await managementService.getQueue({
-        status: statusFilter,
-        priority: priorityFilter,
-      });
-
-      if (!result.success) {
-        setError(result.error || 'Failed to load complaints');
-        setComplaints([]);
-        return;
-      }
-
-      setComplaints(result.data || []);
-    } catch (err) {
-      console.error('Queue load error:', err);
-      setError('Failed to load complaints. Please refresh.');
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, priorityFilter]);
-
-  // Load dashboard stats
-  const loadStats = useCallback(async () => {
-    try {
-      const result = await managementService.getDashboardStats();
-
-      if (result.success) {
-        setStats(result.data || {});
-      }
-    } catch (err) {
-      console.error('Stats load error:', err);
-    }
-  }, []);
-
-  // Initial load
-  useEffect(() => {
-    loadQueue();
-    loadStats();
-  }, [loadQueue, loadStats]);
-
-  // Filter & search
-  const filteredComplaints = useMemo(() => {
-    return complaints.filter((complaint) => {
-      const matchSearch =
-        !searchQuery.trim() ||
-        complaint.complaintId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        complaint.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        complaint.location?.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchTab =
-        activeTab === 'queue' ||
-        (activeTab === 'overdue' && new Date(complaint.slaDeadline) < new Date()) ||
-        (activeTab === 'rework' && complaint.status === 'rework_required');
-
-      return matchSearch && matchTab;
-    });
-  }, [complaints, searchQuery, activeTab]);
-
-  // Open modal with context
-  const openModal = (type, complaint) => {
-    setSelectedComplaint(complaint);
-    setModalState({ type, visible: true });
-  };
-
-  const closeModal = () => {
-    setModalState({ type: null, visible: false });
-    setSelectedComplaint(null);
-  };
-
-  const handleModalSuccess = () => {
-    closeModal();
-    loadQueue(); // Refresh queue
-  };
-
-  // Render modal content
-  const renderModal = () => {
-    if (!modalState.visible || !selectedComplaint) return null;
-
-    const props = {
-      complaint: selectedComplaint,
-      onSuccess: handleModalSuccess,
-      onClose: closeModal,
-    };
-
-    switch (modalState.type) {
-      case 'validate':
-        return <ValidateModal {...props} />;
-      case 'triage':
-        return <TriageModal {...props} />;
-      case 'scope':
-        return <ScopeModal {...props} />;
-      case 'assign':
-        return <AssignModal {...props} />;
-      case 'quality-check':
-        return <QualityCheckModal {...props} />;
-      case 'schedule-inspection':
-        return <ScheduleInspectionModal {...props} />;
-      case 'resident-approval':
-        return <ResidentApprovalModal {...props} />;
-      case 'rework':
-        return <ReworkModal {...props} />;
-      case 'escalate':
-        return <EscalateModal {...props} />;
-      case 'close':
-        return <CloseComplaintModal {...props} />;
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <Layout>
-      <div className="min-h-screen bg-gray-50">
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
-        {/* Header Section */}
-        <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Management Dashboard</h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Manage complaints from intake to closure
-              </p>
-            </div>
-          </div>
-
-          {/* Quick Stats */}
-          <DashboardStats stats={stats} />
-        </div>
-
-        {/* Main Content */}
-        <div className="grid grid-cols-1 gap-6">
-
-          {/* Main Queue */}
-          <div className="order-1">
-            {error && (
-              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex gap-2">
-                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                {error}
-              </div>
-            )}
-
-            <ManagementQueue
-              complaints={filteredComplaints}
-              loading={loading}
-              onSelectComplaint={(complaint) => {
-                setSelectedComplaint(complaint);
-                setShowDetailModal(true);
-              }}
-              onAction={openModal}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Modals */}
-      {showDetailModal && selectedComplaint && (
-        <ComplaintDetailModal
-          complaint={selectedComplaint}
-          onClose={() => setShowDetailModal(false)}
-          onAction={openModal}
-        />
-      )}
-
-      {renderModal()}
-      </div>
-    </Layout>
-  );
-}
-
-
 
 
 
@@ -274,13 +17,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ComplaintDetailDrawer } from './estates/ComplaintDetailDrawer';
 import { MOCK_COMPLAINTS, MOCK_STATS, MOCK_TECHNICIANS } from './estates/mockData';
-import type { ManagedComplaint, DashboardStats, Technician } from './estates/types';
-import authService from '../../services/api';
-import managementService from '../../services/managementService';
+import authService from '../services/api';
+import managementService from '../services/managementApi';
 
 // ─── Status label map (short names for badges) ────────────────────────────────
 
-const STATUS_LABELS: Record<string, string> = {
+const STATUS_LABELS = {
   pending: 'Pending',
   triaged: 'Triaged',
   analyzed: 'Analyzed',
@@ -292,17 +34,17 @@ const STATUS_LABELS: Record<string, string> = {
   closed: 'Closed',
 };
 
-function statusLabel(s: string) {
+function statusLabel(s) {
   return STATUS_LABELS[s] ?? s.replace(/[_-]/g, ' ');
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string) {
+function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function slaLabel(iso: string | null): { label: string; cls: string } {
+function slaLabel(iso) {
   if (!iso) return { label: '—', cls: 'text-slate-400' };
   const diff = (new Date(iso).getTime() - Date.now()) / 3600000;
   if (diff < 0) return { label: `${Math.abs(diff).toFixed(0)}h overdue`, cls: 'text-rose-600 font-semibold' };
@@ -311,14 +53,14 @@ function slaLabel(iso: string | null): { label: string; cls: string } {
   return { label: `${(diff / 24).toFixed(1)}d left`, cls: 'text-slate-500' };
 }
 
-const PRIORITY_BADGE: Record<string, string> = {
+const PRIORITY_BADGE = {
   CRITICAL: 'bg-rose-100 text-rose-800 border-rose-300',
   HIGH: 'bg-orange-100 text-orange-800 border-orange-300',
   MEDIUM: 'bg-amber-100 text-amber-800 border-amber-300',
   LOW: 'bg-slate-100 text-slate-600 border-slate-200',
 };
 
-const STATUS_BADGE: Record<string, string> = {
+const STATUS_BADGE = {
   pending: 'bg-slate-100 text-slate-700 border-slate-300',
   triaged: 'bg-blue-100 text-blue-700 border-blue-300',
   analyzed: 'bg-sky-100 text-sky-700 border-sky-300',
@@ -348,10 +90,7 @@ const LIMIT = 8;
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
-function StatCard({ title, value, sub, icon: Icon, accent }: {
-  title: string; value: number | string; sub: string;
-  icon: React.ElementType; accent: string;
-}) {
+function StatCard({ title, value, sub, icon: Icon, accent }) {
   return (
     <Card className="border border-slate-200 shadow-sm hover:shadow transition-shadow">
       <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
@@ -370,7 +109,7 @@ function StatCard({ title, value, sub, icon: Icon, accent }: {
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status }) {
   return (
     <span
       className={`
@@ -384,7 +123,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function PriorityBadge({ priority }: { priority: string }) {
+function PriorityBadge({ priority }) {
   return (
     <span
       className={`
@@ -400,8 +139,8 @@ function PriorityBadge({ priority }: { priority: string }) {
 
 // ─── Analytics Tab ────────────────────────────────────────────────────────────
 
-function AnalyticsTab({ stats, complaints }: { stats: DashboardStats; complaints: ManagedComplaint[] }) {
-  const byCategory = complaints.reduce<Record<string, number>>((acc, c) => {
+function AnalyticsTab({ stats, complaints }) {
+  const byCategory = complaints.reduce((acc, c) => {
     acc[c.category] = (acc[c.category] ?? 0) + 1;
     return acc;
   }, {});
@@ -524,9 +263,9 @@ function AnalyticsTab({ stats, complaints }: { stats: DashboardStats; complaints
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function EstatesOfficerDashboard() {
-  const [complaints, setComplaints] = useState<ManagedComplaint[]>([]);
-  const [stats, setStats] = useState<DashboardStats>(MOCK_STATS);
-  const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [complaints, setComplaints] = useState([]);
+  const [stats, setStats] = useState(MOCK_STATS);
+  const [technicians, setTechnicians] = useState([]);
   const [loading, setLoading] = useState(true);
   const [usingMock, setUsingMock] = useState(false);
 
@@ -542,14 +281,14 @@ export default function EstatesOfficerDashboard() {
   const [categoryFilter, setCategoryFilter] = useState('all');
 
   // drawer
-  const [selected, setSelected] = useState<ManagedComplaint | null>(null);
+  const [selected, setSelected] = useState(null);
 
   const user = authService.getCurrentUserFromStorage?.() ?? { name: 'Estates Officer', email: '' };
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceRef = useRef(null);
 
   // ── fetch queue ────────────────────────────────────────────────────────────
 
-  const fetchQueue = useCallback(async (currentPage: number) => {
+  const fetchQueue = useCallback(async (currentPage) => {
     setLoading(true);
     try {
       const res = await managementService.getQueue({
@@ -642,7 +381,7 @@ export default function EstatesOfficerDashboard() {
 
   // ── handle complaint update from drawer ────────────────────────────────────
 
-  const handleRefresh = useCallback((_id: string, updated: ManagedComplaint) => {
+  const handleRefresh = useCallback((_id, updated) => {
     setComplaints((prev) => prev.map((c) => (c._id === updated._id ? updated : c)));
     setSelected(updated);
     // Refresh stats after state change

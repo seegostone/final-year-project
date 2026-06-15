@@ -860,6 +860,136 @@ export const managementOperations = {
     return await complaints.findOne({ _id: new ObjectId(complaintId) });
   },
 
+
+
+
+
+
+  // ── addTaskToComplaint (ENHANCED) ────────────────────────────
+  // Replace the existing addTaskToComplaint inside managementOperations
+
+  async addTaskToComplaint(db, complaintId, taskData, createdBy) {
+    const complaints = db.collection('complaints');
+    const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
+    if (!complaint) return null;
+
+    const estimatedDurationDays = parseFloat(taskData.estimatedDurationDays) || 1;
+
+    // Duration validation against complaint scope
+    const scopeDuration = complaint.scopeDefinition?.estimatedDuration;
+    if (scopeDuration) {
+      const existingTotal = (complaint.tasks || []).reduce(
+        (sum, t) => sum + (t.estimatedDurationDays || 0), 0
+      );
+      if (existingTotal + estimatedDurationDays > scopeDuration) {
+        throw new Error(
+          `Task duration exceeds remaining scope capacity. ` +
+          `Available: ${(scopeDuration - existingTotal).toFixed(2)} day(s). ` +
+          `Requested: ${estimatedDurationDays} day(s).`
+        );
+      }
+    }
+
+    // Calculate deadline from startDate + estimatedDurationDays
+    const startDate = taskData.startDate ? new Date(taskData.startDate) : new Date();
+    const deadline = new Date(startDate.getTime() + estimatedDurationDays * 24 * 60 * 60 * 1000);
+
+    const allowedPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+    const priority = allowedPriorities.includes(taskData.priority) ? taskData.priority : 'MEDIUM';
+
+    const task = {
+      _id: new ObjectId(),
+      title: taskData.title || 'Task',
+      description: taskData.description || '',
+      status: 'open',           // open | in_progress | done | blocked
+      priority,                 // LOW | MEDIUM | HIGH | CRITICAL
+      estimatedDurationDays,
+      startDate,
+      deadline,
+      completedAt: null,
+      assigneeId: taskData.assigneeId ? new ObjectId(taskData.assigneeId) : null,
+      assigneeName: taskData.assigneeName || null,
+      assignedAt: taskData.assigneeId ? new Date() : null,
+      notes: taskData.notes || null,
+      createdBy: new ObjectId(createdBy),
+      createdAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'task_created',
+      from: complaint.status,
+      to: complaint.status,
+      by: createdBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Task created: ${task.title} (${estimatedDurationDays}d, Priority: ${priority})`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $push: { tasks: task, history: historyEntry },
+        $set: { updatedAt: new Date() },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+    return task;
+  },
+
+
+  // ── updateTaskStatus (NEW) ───────────────────────────────────
+  // Add this as a new method inside managementOperations
+
+  async updateTaskStatus(db, complaintId, taskId, statusData, updatedBy) {
+    const complaints = db.collection('complaints');
+    const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
+    if (!complaint) return null;
+
+    const task = (complaint.tasks || []).find((t) => t._id.toString() === taskId);
+    if (!task) return null;
+
+    const allowedStatuses = ['open', 'in_progress', 'done', 'blocked'];
+    if (!allowedStatuses.includes(statusData.status)) return null;
+
+    const updateFields = {
+      'tasks.$.status': statusData.status,
+      updatedAt: new Date(),
+    };
+
+    if (statusData.status === 'done') {
+      updateFields['tasks.$.completedAt'] = new Date();
+    }
+    if (statusData.notes) {
+      updateFields['tasks.$.notes'] = statusData.notes;
+    }
+
+    const historyEntry = buildHistoryEntry({
+      action: 'task_status_updated',
+      from: complaint.status,
+      to: complaint.status,
+      by: updatedBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Task "${task.title}" status -> ${statusData.status}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId), 'tasks._id': new ObjectId(taskId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+
+
+
+
   // Triage complaint (Phase 1)
   async triageComplaint(db, complaintId, triageData) {
     const complaints = db.collection('complaints');
@@ -1006,48 +1136,6 @@ export const managementOperations = {
     return await complaints.findOne({ _id: new ObjectId(complaintId) });
   },
 
-  // Add a task to a complaint
-  async addTaskToComplaint(db, complaintId, taskData, createdBy) {
-    const complaints = db.collection('complaints');
-    const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
-    if (!complaint) return null;
-
-    const task = {
-      _id: new ObjectId(),
-      title: taskData.title || taskData.text || 'Task',
-      description: taskData.description || '',
-      status: 'open', // open, in_progress, done
-      createdBy: new ObjectId(createdBy),
-      createdAt: new Date(),
-      assigneeId: taskData.assigneeId ? new ObjectId(taskData.assigneeId) : null,
-      assigneeName: taskData.assigneeName || null,
-      assignedAt: taskData.assigneeId ? new Date() : null,
-      notes: taskData.notes || null,
-    };
-
-    const historyEntry = buildHistoryEntry({
-      action: 'task_created',
-      from: complaint.status,
-      to: complaint.status,
-      by: createdBy,
-      byName: 'Estates Officer',
-      byRole: 'estates_officer',
-      note: `Task created: ${task.title}`,
-    });
-
-    const result = await complaints.updateOne(
-      { _id: new ObjectId(complaintId) },
-      {
-        $push: { tasks: task, history: historyEntry },
-        $set: { updatedAt: new Date() },
-      }
-    );
-
-    if (result.modifiedCount === 0) return null;
-
-    // Return the created task (with _id)
-    return task;
-  },
 
   // Assign a technician to a specific task inside a complaint
   async assignTaskToComplaint(db, complaintId, taskId, assigneeData, assignedBy) {
