@@ -10,7 +10,6 @@ import { getRoleRedirectPath } from './hooks/useRoleRedirect'; // ✅ Import the
 import AdminDashboard from './components/AdminDashboard';
 import TechnicianDashboard from './components/TechnicianDashboard';
 import ComplaintDashboard from './components/ComplaintDashboard';
-import TasksPage from './components/TasksPage';
 import UnauthorizedPage from './components/UnauthorizedPage';
 import ForgotPasswordPage from './components/ForgotPasswordPage';
 import ResetPasswordPage from './components/ResetPasswordPage';
@@ -75,7 +74,6 @@ function App() {
 
         {/* Complaints pages */}
         <Route path="/complaints" element={<ProtectedRoute><ComplaintDashboard /></ProtectedRoute>} />
-        <Route path="/complaints/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
         
         {/* Catch all - redirect based on role */}
         <Route 
