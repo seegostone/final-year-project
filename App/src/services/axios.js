@@ -63,6 +63,23 @@ axiosInstance.interceptors.response.use(
     }
     
     const { status, data } = error.response;
+    const config = error.config || {};
+
+    // Retry on 429 with exponential backoff
+    if (status === 429) {
+      const maxRetries = config.__maxRetries ?? 3;
+      config.__retryCount = config.__retryCount || 0;
+
+      if (config.__retryCount < maxRetries) {
+        config.__retryCount += 1;
+        const delay = Math.min(2000, 300 * Math.pow(2, config.__retryCount));
+
+        return new Promise((resolve) => setTimeout(resolve, delay)).then(() =>
+          axios.request(config)
+        );
+      }
+      // fall through to return formatted rate-limit error after retries exhausted
+    }
     
     // Handle specific status codes
     switch (status) {
