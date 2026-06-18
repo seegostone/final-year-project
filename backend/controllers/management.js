@@ -442,8 +442,17 @@ export const getManagementQueue = async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 10;
     const priorityFilter = req.query.priority || 'all';
     const statusFilter = req.query.status || 'all';
+    const categoryFilter = req.query.category || 'all';
+    const searchQuery = req.query.search || '';
 
-    console.log('🔵 [GET QUEUE] Priority:', priorityFilter, 'Status:', statusFilter);
+    console.log(
+      '🔵 [GET QUEUE] Priority:', priorityFilter,
+      'Status:', statusFilter,
+      'Category:', categoryFilter,
+      'Search:', searchQuery,
+      'Page:', page,
+      'Limit:', limit
+    );
 
     // Check permission
     const allowedRoles = ['admin', 'estates_officer'];
@@ -459,7 +468,9 @@ export const getManagementQueue = async (req, res) => {
       page,
       limit,
       priorityFilter,
-      statusFilter
+      statusFilter,
+      categoryFilter,
+      searchQuery
     );
 
     console.log('✅ [GET QUEUE] Found', result.complaints.length, 'complaints');

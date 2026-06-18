@@ -37,5 +37,35 @@ const fileFilter = (req, file, cb) => {
 export const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit
 });
+
+// Error handler for multer
+export const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        message: `File too large. Maximum size is 20MB.`,
+        error: err.message,
+      });
+    }
+    if (err.code === 'LIMIT_PART_COUNT') {
+      return res.status(400).json({
+        success: false,
+        message: 'Too many file parts',
+        error: err.message,
+      });
+    }
+  }
+  
+  if (err instanceof Error && err.message.includes('Invalid file type')) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+      error: 'Only JPEG, PNG, GIF, and WebP images are allowed',
+    });
+  }
+  
+  next(err);
+};

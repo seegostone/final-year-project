@@ -14,26 +14,34 @@ function normalizeRole(role) {
 // Atomic sequence helper for generating unique sequential IDs
 async function getNextSequence(db, name) {
   const counters = db.collection('counters');
-  const res = await counters.findOneAndUpdate(
-    { _id: name },
-    { $inc: { seq: 1 } },
-    { returnDocument: 'after', upsert: true }
-  );
+  try {
+    const res = await counters.findOneAndUpdate(
+      { _id: name },
+      { $inc: { seq: 1 } },
+      { returnDocument: 'after', upsert: true }
+    );
 
-  const counter = res?.value || (await counters.findOne({ _id: name }));
-  if (!counter) {
-    const insertRes = await counters.insertOne({ _id: name, seq: 1 });
-    if (!insertRes.acknowledged) {
-      throw new Error(`Failed to initialize counter for ${name}`);
+    if (res?.value?.seq !== undefined && typeof res.value.seq === 'number') {
+      return res.value.seq;
     }
+
+    // Fallback: try to read it directly
+    const counter = await counters.findOne({ _id: name });
+    if (counter && typeof counter.seq === 'number') {
+      return counter.seq;
+    }
+
+    // If still no counter, initialize it
+    await counters.updateOne(
+      { _id: name },
+      { $set: { seq: 1 } },
+      { upsert: true }
+    );
     return 1;
+  } catch (error) {
+    console.error(`[getNextSequence] Error for counter ${name}:`, error.message);
+    throw error;
   }
-
-  if (typeof counter.seq !== 'number') {
-    throw new Error(`Counter value for ${name} is invalid`);
-  }
-
-  return counter.seq;
 }
 
 function buildCreatedAtFilter(timeRange, startDate, endDate) {
@@ -1177,7 +1185,9 @@ export const managementOperations = {
     page = 1,
     limit = 10,
     priorityFilter = 'all',
-    statusFilter = 'triaged'
+    statusFilter = 'triaged',
+    categoryFilter = 'all',
+    searchQuery = ''
   ) {
     const complaints = db.collection('complaints');
     const skip = (page - 1) * limit;
@@ -1193,6 +1203,22 @@ export const managementOperations = {
     // Filter by priority
     if (priorityFilter !== 'all') {
       query.priority = priorityFilter;
+    }
+
+    // Filter by category
+    if (categoryFilter !== 'all') {
+      query.category = categoryFilter;
+    }
+
+    // Search across text fields
+    if (searchQuery) {
+      const normalizedSearch = searchQuery.trim();
+      query.$or = [
+        { complaintId: { $regex: normalizedSearch, $options: 'i' } },
+        { title: { $regex: normalizedSearch, $options: 'i' } },
+        { location: { $regex: normalizedSearch, $options: 'i' } },
+        { 'user.name': { $regex: normalizedSearch, $options: 'i' } },
+      ];
     }
 
     const total = await complaints.countDocuments(query);

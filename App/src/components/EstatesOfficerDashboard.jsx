@@ -12,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ComplaintDetailDrawer } from './estates/ComplaintDetailDrawer';
 import Header from './Header';
-import { MOCK_COMPLAINTS, MOCK_STATS, MOCK_TECHNICIANS } from './estates/mockData';
 import authService from '../services/api';
 import managementService from '../services/managementApi';
 
@@ -260,10 +259,10 @@ function AnalyticsTab({ stats, complaints }) {
 
 export default function EstatesOfficerDashboard() {
   const [complaints, setComplaints] = useState([]);
-  const [stats, setStats] = useState(MOCK_STATS);
+  const [stats, setStats] = useState({});
   const [technicians, setTechnicians] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [usingMock, setUsingMock] = useState(false);
+  const [queueError, setQueueError] = useState('');
 
   // server-side pagination
   const [page, setPage] = useState(1);
@@ -296,35 +295,32 @@ export default function EstatesOfficerDashboard() {
         limit: LIMIT,
       });
 
-      if (res.success && res.data?.data) {
-        setComplaints(res.data.data);
-        setTotalPages(res.data.pagination?.totalPages ?? 1);
-        setTotalComplaints(res.data.pagination?.totalComplaints ?? res.data.data.length);
-        setUsingMock(false);
+      const queueData = Array.isArray(res.data?.data)
+        ? res.data.data
+        : Array.isArray(res.data)
+          ? res.data
+          : [];
+
+      if (res.success) {
+        setComplaints(queueData);
+        setTotalPages(res.pagination?.totalPages ?? 1);
+        setTotalComplaints(res.pagination?.totalComplaints ?? queueData.length);
+        setQueueError('');
       } else {
-        // API not reachable — fall back to mock with client-side filtering
-        const filtered = MOCK_COMPLAINTS.filter((c) => {
-          if (statusFilter !== 'all' && c.status !== statusFilter) return false;
-          if (priorityFilter !== 'all' && c.priority !== priorityFilter) return false;
-          if (categoryFilter !== 'all' && c.category !== categoryFilter) return false;
-          if (search) {
-            const q = search.toLowerCase();
-            return c.title.toLowerCase().includes(q) || c.location.toLowerCase().includes(q) ||
-              c.complaintId.toLowerCase().includes(q) || (c.user?.name?.toLowerCase().includes(q) ?? false);
-          }
-          return true;
-        });
-        const start = (currentPage - 1) * LIMIT;
-        setComplaints(filtered.slice(start, start + LIMIT));
-        setTotalPages(Math.max(1, Math.ceil(filtered.length / LIMIT)));
-        setTotalComplaints(filtered.length);
-        setUsingMock(true);
+        const message = res.error || 'Unable to fetch management queue';
+        console.error('Management queue API returned failure:', message, res.type, res.status, res);
+        setQueueError(`${res.type || 'ERROR'}: ${message}`);
+        setComplaints([]);
+        setTotalPages(1);
+        setTotalComplaints(0);
       }
-    } catch {
-      setComplaints(MOCK_COMPLAINTS.slice(0, LIMIT));
-      setTotalPages(Math.ceil(MOCK_COMPLAINTS.length / LIMIT));
-      setTotalComplaints(MOCK_COMPLAINTS.length);
-      setUsingMock(true);
+    } catch (error) {
+      const message = error?.message || 'Failed to load management queue';
+      console.error('Failed to load management queue:', error);
+      setQueueError(message);
+      setComplaints([]);
+      setTotalPages(1);
+      setTotalComplaints(0);
     } finally {
       setLoading(false);
     }
@@ -342,15 +338,30 @@ export default function EstatesOfficerDashboard() {
       if (statsRes.success && statsRes.data) {
         setStats(statsRes.data);
       } else {
-        setStats(MOCK_STATS);
+        setStats({});
       }
 
+      // Normalize technician records from backend so UI fields match
+      const normalizeTech = (t) => ({
+        _id: t._id || t.id || null,
+        name: t.name || t.fullName || t.user?.name || '',
+        email: t.email || '',
+        phone: t.phone || t.phoneNumber || '',
+        role: t.role || '',
+        specialization: t.specialization || t.trade || '',
+        // Some parts of the UI expect `trade`/`zone` (mock data); keep them in sync
+        trade: t.trade || t.specialization || '',
+        zone: t.zone || '',
+        avatar: t.avatar || null,
+        ...t,
+      });
+
       if (techRes.success && Array.isArray(techRes.data?.data)) {
-        setTechnicians(techRes.data.data);
+        setTechnicians(techRes.data.data.map(normalizeTech));
       } else if (techRes.success && Array.isArray(techRes.data)) {
-        setTechnicians(techRes.data);
+        setTechnicians(techRes.data.map(normalizeTech));
       } else {
-        setTechnicians(MOCK_TECHNICIANS);
+        setTechnicians([]);
       }
     })();
   }, []);
@@ -512,6 +523,11 @@ export default function EstatesOfficerDashboard() {
                     )}
                   </div>
                 </div>
+                {queueError && (
+                  <div className="mt-3 text-sm text-rose-600">
+                    {queueError}
+                  </div>
+                )}
               </div>
 
               {/* Table */}
@@ -557,8 +573,9 @@ export default function EstatesOfficerDashboard() {
                     ) : (
                       complaints.map((c) => {
                         const sla = slaLabel(c.slaDeadline ?? null);
-                        const doneTasks = c.tasks.filter((t) => t.status === 'done').length;
-                        const overdueTasks = c.tasks.filter((t) => t.status !== 'done' && t.deadline && new Date(t.deadline) < new Date()).length;
+                        const tasks = Array.isArray(c.tasks) ? c.tasks : [];
+                        const doneTasks = tasks.filter((t) => t.status === 'done').length;
+                        const overdueTasks = tasks.filter((t) => t.status !== 'done' && t.deadline && new Date(t.deadline) < new Date()).length;
                         const isSlaBreached = c.slaDeadline && new Date(c.slaDeadline) < new Date() && c.status !== 'closed';
 
                         return (
@@ -613,9 +630,9 @@ export default function EstatesOfficerDashboard() {
                             </td>
                             {/* Tasks */}
                             <td className="px-4 py-3">
-                              {c.tasks.length > 0 ? (
+                              {tasks.length > 0 ? (
                                 <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                  <span className="text-xs text-slate-600 font-medium">{doneTasks}/{c.tasks.length}</span>
+                                  <span className="text-xs text-slate-600 font-medium">{doneTasks}/{tasks.length}</span>
                                   {overdueTasks > 0 && (
                                     <span className="text-xs text-rose-600 flex items-center gap-0.5">
                                       <AlertTriangle className="h-2.5 w-2.5" />{overdueTasks}

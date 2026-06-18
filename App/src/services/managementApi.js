@@ -9,15 +9,29 @@ const managementService = {
         status: filters.status || 'all',
         priority: filters.priority || 'all',
       });
+      if (filters.category) queryString.append('category', filters.category);
+      if (filters.search) queryString.append('search', filters.search);
+      if (filters.page) queryString.append('page', String(filters.page));
+      if (filters.limit) queryString.append('limit', String(filters.limit));
 
       const response = await axiosInstance.get(
         `/management/queue?${queryString.toString()}`
       );
 
+      const payload = response.data || response;
+      const data = Array.isArray(payload.data)
+        ? payload.data
+        : Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload.data?.data)
+            ? payload.data.data
+            : [];
+
       return {
         success: true,
-        data: response.data || response,
-        count: response.count,
+        data,
+        count: payload.count ?? 0,
+        pagination: payload.pagination ?? payload.data?.pagination,
       };
     } catch (error) {
       console.error('Get queue error:', error);

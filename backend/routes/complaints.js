@@ -10,7 +10,7 @@ import {
   deleteComplaint,
 } from '../controllers/complaints.js';
 import { protect, authorize } from '../middleware/auth.js';
-import { upload } from '../config/multer.js';
+import { upload, handleMulterError } from '../config/multer.js';
 
 const router = express.Router();
 
@@ -64,6 +64,7 @@ router.use(protect);
 router.post(
   '/',
   upload.single('image'),
+  handleMulterError,
   createComplaintValidation,
   createComplaint
 );

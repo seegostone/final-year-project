@@ -93,7 +93,8 @@ export const createComplaint = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Create complaint error:', error);
+    console.error('❌ [CREATE COMPLAINT] Error:', error.message);
+    console.error('Stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Server error while creating complaint',
