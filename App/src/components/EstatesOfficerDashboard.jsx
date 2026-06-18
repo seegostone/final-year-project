@@ -1,8 +1,3 @@
-
-
-
-
-
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, Building2, CheckCircle2, Clock, Filter,
@@ -16,6 +11,7 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ComplaintDetailDrawer } from './estates/ComplaintDetailDrawer';
+import Header from './Header';
 import { MOCK_COMPLAINTS, MOCK_STATS, MOCK_TECHNICIANS } from './estates/mockData';
 import authService from '../services/api';
 import managementService from '../services/managementApi';
@@ -394,51 +390,27 @@ export default function EstatesOfficerDashboard() {
   const slaBreaching = complaints.filter((c) => c.slaDeadline && new Date(c.slaDeadline) < new Date() && c.status !== 'closed').length;
 
   return (
-    <div className="min-h-screen bg-[#f4f6f9]">
-      {/* ── Header ── */}
-      <header className="bg-[#1e3a5f] text-white sticky top-0 z-40 shadow-lg">
-        <div className="max-w-screen-2xl mx-auto px-4 md:px-6">
-          <div className="flex h-14 items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 bg-white/15 rounded-lg flex items-center justify-center shrink-0">
-                <Building2 className="h-4 w-4 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold leading-none">Estates Department</p>
-                <p className="text-xs text-blue-200 leading-none mt-0.5">Makerere University · Officer Portal</p>
-              </div>
-            </div>
+    <div className="min-h-screen bg-white">
+      {/* ── Shared Header ── */}
+      <Header onHamburgerClick={() => {}} />
 
-            <div className="flex items-center gap-2 sm:gap-3">
-              {usingMock && (
-                <div className="hidden sm:flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/40 rounded-full px-3 py-1 text-xs text-amber-200">
-                  <WifiOff className="h-3 w-3" /> Demo mode
-                </div>
-              )}
-              {slaBreaching > 0 && (
-                <div className="hidden sm:flex items-center gap-1.5 bg-rose-500/20 border border-rose-400/40 rounded-full px-3 py-1 text-xs text-rose-200 font-medium">
-                  <AlertTriangle className="h-3 w-3" />
-                  {slaBreaching} SLA {slaBreaching > 1 ? 'breaches' : 'breach'}
-                </div>
-              )}
-              <div className="flex items-center gap-1.5 text-sm text-blue-100 cursor-default">
-                <div className="h-7 w-7 rounded-full bg-white/15 flex items-center justify-center shrink-0">
-                  <User className="h-3.5 w-3.5" />
-                </div>
-                <span className="hidden sm:inline text-sm">{user?.name ?? 'Officer'}</span>
-                <ChevronDown className="h-3 w-3 text-blue-300" />
+      {/* ── Content Header ── */}
+      <div className="sticky top-[76px] z-30 bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+        <div className="max-w-screen-2xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">Management Queue</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Oversee complaints and workflow</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {slaBreaching > 0 && (
+              <div className="flex items-center gap-1.5 bg-rose-100 border border-rose-300 rounded-full px-3 py-1 text-xs text-rose-800 font-medium">
+                <AlertTriangle className="h-3 w-3" />
+                {slaBreaching} SLA {slaBreaching > 1 ? 'breaches' : 'breach'}
               </div>
-              <Button
-                variant="ghost" size="sm"
-                className="text-blue-200 hover:text-white hover:bg-white/10 h-7 px-2"
-                onClick={handleLogout}
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+            )}
           </div>
         </div>
-      </header>
+      </div>
 
       <main className="max-w-screen-2xl mx-auto px-4 md:px-6 py-5">
         {/* ── Stats Row ── */}

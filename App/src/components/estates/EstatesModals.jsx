@@ -52,9 +52,9 @@ export function DefineScopeModal({ open, complaint, onClose, onSubmit }) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg bg-white border border-slate-200">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-[#1e3a5f]">
+          <DialogTitle className="flex items-center gap-2 text-blue-600">
             Define Scope — {complaint.complaintId}
           </DialogTitle>
         </DialogHeader>
@@ -107,8 +107,8 @@ export function DefineScopeModal({ open, complaint, onClose, onSubmit }) {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={loading} className="bg-[#1e3a5f] hover:bg-[#16304f] text-white">
+          <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
             {loading ? 'Saving...' : 'Define Scope'}
           </Button>
         </DialogFooter>
@@ -239,8 +239,8 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={loading} className="bg-[#1e3a5f] hover:bg-[#16304f] text-white">
+          <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
             {loading ? 'Creating...' : 'Create Task'}
           </Button>
         </DialogFooter>
@@ -305,8 +305,8 @@ export function AssignTaskModal({ open, task, complaint, technicians, onClose, o
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={loading} className="bg-[#1e3a5f] hover:bg-[#16304f] text-white">
+          <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
             {loading ? 'Assigning...' : 'Assign Technician'}
           </Button>
         </DialogFooter>
@@ -371,8 +371,8 @@ export function AssignComplaintModal({ open, complaint, technicians, onClose, on
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={loading} className="bg-[#1e3a5f] hover:bg-[#16304f] text-white">
+          <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
             {loading ? 'Assigning...' : 'Assign Complaint'}
           </Button>
         </DialogFooter>
@@ -577,9 +577,9 @@ export function CloseComplaintModal({ open, complaint, onClose, onSubmit }) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md bg-white border border-slate-200">
         <DialogHeader>
-          <DialogTitle className="text-[#1e3a5f]">Close Complaint — {complaint.complaintId}</DialogTitle>
+          <DialogTitle className="text-blue-600">Close Complaint — {complaint.complaintId}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           {success ? (
@@ -616,8 +616,8 @@ export function CloseComplaintModal({ open, complaint, onClose, onSubmit }) {
         </div>
         {!success && (
           <DialogFooter>
-            <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={loading} className="bg-emerald-700 hover:bg-emerald-800 text-white">
+            <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">Cancel</Button>
+            <Button onClick={handleSubmit} disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               {loading ? 'Closing...' : 'Close Complaint'}
             </Button>
           </DialogFooter>
