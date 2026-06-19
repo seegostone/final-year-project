@@ -2,12 +2,17 @@ import React from 'react';
 import { RefreshCw, Filter, AlertTriangle, Clock } from 'lucide-react';
 
 function PriorityBadge({ priority }) {
+  if (!priority) {
+    return <span className="text-xs text-slate-300">—</span>;
+  }
+
   const PRIO = {
     CRITICAL: 'bg-rose-100 text-rose-800 border-rose-300',
     HIGH: 'bg-orange-100 text-orange-800 border-orange-300',
     MEDIUM: 'bg-amber-100 text-amber-800 border-amber-300',
     LOW: 'bg-slate-100 text-slate-600 border-slate-200',
   };
+
   return (
     <span className={`inline-block text-xs px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${PRIO[priority] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>{priority}</span>
   );
@@ -81,8 +86,13 @@ function ComplaintTable({ complaints = [], loading, onRowClick, STATUS_BADGE, st
               return (
                 <tr key={c._id} onClick={() => onRowClick(c)} className={`border-b border-slate-100 cursor-pointer transition-colors hover:bg-[#eef2f7]/70 ${isSlaBreached ? 'bg-rose-50/25' : ''}`}>
                   <td className="px-4 py-3"><span className="font-mono text-xs text-[#1e3a5f] font-bold">{c.complaintId}</span></td>
-                  <td className="px-4 py-3"><p className="font-medium text-slate-800 leading-tight line-clamp-1 max-w-[280px]">{c.title}</p><p className="text-xs text-slate-400 line-clamp-1 mt-0.5 max-w-[280px]">{c.location}</p></td>
-                  <td className="px-4 py-3"><p className="text-xs text-slate-600 line-clamp-1 max-w-[130px]">{c.user?.name ?? '—'}</p></td>
+                  <td className="px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-800 leading-tight line-clamp-1 max-w-[280px]">{c.title}</p>
+                      <p className="text-xs text-slate-400 line-clamp-1 mt-0.5 max-w-[280px]">{c.location}</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3"><p className="text-xs text-slate-600 line-clamp-1 max-w-[130px]">{c.user?.name ?? (c.history?.find((h) => h.action === 'submitted')?.byName) ?? '—'}</p></td>
                   <td className="px-4 py-3"><span className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded px-2 py-0.5 whitespace-nowrap">{c.category}</span></td>
                   <td className="px-4 py-3"><PriorityBadge priority={c.priority} /></td>
                   <td className="px-4 py-3"><StatusBadge status={c.status} STATUS_BADGE={STATUS_BADGE} statusLabel={statusLabel} /></td>

@@ -132,8 +132,10 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit}>
             <div className="mb-6">
-              <label className="block text-sm text-[#1F2937] mb-2">Full Name</label>
+              <label htmlFor="registerFullName" className="block text-sm text-[#1F2937] mb-2">Full Name</label>
               <input
+                id="registerFullName"
+                name="fullName"
                 type="text"
                 value={values.fullName}
                 onChange={(e) => handleInputChange('fullName', e.target.value)}
@@ -142,6 +144,7 @@ export default function RegisterPage() {
                   errors.fullName ? 'border-[#FF5733]' : 'border-[rgba(0,0,0,0.1)]'
                 } focus:outline-none focus:border-[#7B1A1A]`}
                 style={{ borderRadius: '0px' }}
+                autoComplete="name"
               />
               {errors.fullName && (
                 <p className="text-xs text-[#FF5733] mt-1 m-0" style={{ fontFamily: 'monospace' }}>
@@ -151,8 +154,10 @@ export default function RegisterPage() {
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm text-[#1F2937] mb-2">Email</label>
+              <label htmlFor="registerEmail" className="block text-sm text-[#1F2937] mb-2">Email</label>
               <input
+                id="registerEmail"
+                name="email"
                 type="email"
                 value={values.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
@@ -161,6 +166,7 @@ export default function RegisterPage() {
                   errors.email ? 'border-[#FF5733]' : 'border-[rgba(0,0,0,0.1)]'
                 } focus:outline-none focus:border-[#7B1A1A]`}
                 style={{ borderRadius: '0px' }}
+                autoComplete="email"
               />
               <p className="text-xs text-[#6B7280] mt-1 m-0" style={{ fontFamily: 'monospace' }}>
                 Must be a valid @mak.ac.ug email address
@@ -173,8 +179,10 @@ export default function RegisterPage() {
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm text-[#1F2937] mb-2">Role</label>
+              <label htmlFor="registerRole" className="block text-sm text-[#1F2937] mb-2">Role</label>
               <select
+                id="registerRole"
+                name="role"
                 value={values.role}
                 onChange={(e) => handleInputChange('role', e.target.value)}
                 className={`w-full px-4 py-3 border bg-white text-[#1F2937] ${
@@ -197,8 +205,10 @@ export default function RegisterPage() {
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm text-[#1F2937] mb-2">Phone Number</label>
+              <label htmlFor="registerPhoneNumber" className="block text-sm text-[#1F2937] mb-2">Phone Number</label>
               <input
+                id="registerPhoneNumber"
+                name="phoneNumber"
                 type="tel"
                 value={values.phoneNumber}
                 onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
@@ -207,6 +217,7 @@ export default function RegisterPage() {
                   errors.phoneNumber ? 'border-[#FF5733]' : 'border-[rgba(0,0,0,0.1)]'
                 } focus:outline-none focus:border-[#7B1A1A]`}
                 style={{ borderRadius: '0px' }}
+                autoComplete="tel"
               />
               {errors.phoneNumber && (
                 <p className="text-xs text-[#FF5733] mt-1 m-0" style={{ fontFamily: 'monospace' }}>
@@ -217,9 +228,11 @@ export default function RegisterPage() {
 
             {/* Password Field with Toggle */}
             <div className="mb-6">
-              <label className="block text-sm text-[#1F2937] mb-2">Password</label>
+              <label htmlFor="registerPassword" className="block text-sm text-[#1F2937] mb-2">Password</label>
               <div className="relative">
                 <input
+                  id="registerPassword"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   value={values.password}
                   onChange={(e) => handleInputChange('password', e.target.value)}
@@ -228,6 +241,7 @@ export default function RegisterPage() {
                     errors.password ? 'border-[#FF5733]' : 'border-[rgba(0,0,0,0.1)]'
                   } focus:outline-none focus:border-[#7B1A1A] pr-12`}
                   style={{ borderRadius: '0px' }}
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"
@@ -264,9 +278,11 @@ export default function RegisterPage() {
 
             {/* Confirm Password Field with Toggle */}
             <div className="mb-8">
-              <label className="block text-sm text-[#1F2937] mb-2">Confirm Password</label>
+              <label htmlFor="registerConfirmPassword" className="block text-sm text-[#1F2937] mb-2">Confirm Password</label>
               <div className="relative">
                 <input
+                  id="registerConfirmPassword"
+                  name="confirmPassword"
                   type={showConfirmPassword ? "text" : "password"}
                   value={values.confirmPassword}
                   onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
@@ -275,6 +291,7 @@ export default function RegisterPage() {
                     errors.confirmPassword ? 'border-[#FF5733]' : 'border-[rgba(0,0,0,0.1)]'
                   } focus:outline-none focus:border-[#7B1A1A] pr-12`}
                   style={{ borderRadius: '0px' }}
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"

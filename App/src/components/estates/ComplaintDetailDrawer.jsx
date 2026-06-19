@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Button } from '../ui/button';
@@ -14,6 +14,8 @@ import {
   AssignComplaintModal, RequestReworkModal, EscalateModal, CloseComplaintModal,
 } from './EstatesModals';
 import managementService from '../../services/managementApi';
+import complaintService from '../../services/complaintsApi';
+import axiosInstance from '../../services/axios';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -80,19 +82,34 @@ function TaskDeadlineChip({ task }) {
 
 // ─── Drawer ───────────────────────────────────────────────────────────────────
 
-export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefresh }) {
+export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClose, onRefresh }) {
   const [activeModal, setActiveModal] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [apiError, setApiError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
+  const refreshComplaintData = useCallback(async () => {
+    if (!complaint || !complaint._id) return null;
+    try {
+      const res = await complaintService.getComplaintById(complaint._id);
+      if (res.success && res.data) {
+        onRefresh(complaint._id, res.data);
+        return res.data;
+      }
+    } catch (err) {
+      console.error('Failed to refresh complaint:', err);
+    }
+    return null;
+  }, [complaint, onRefresh]);
+
   if (!complaint) return null;
 
-  const completedTasks = complaint.tasks.filter((t) => t.status === 'done').length;
-  const totalTasks = complaint.tasks.length;
+  const tasks = complaint.tasks ?? [];
+  const completedTasks = tasks.filter((t) => t.status === 'done').length;
+  const totalTasks = tasks.length;
   const taskProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-  const overdueTasks = complaint.tasks.filter((t) => t.deadline && isOverdue(t.deadline, t.status));
-  const scopeUsed = complaint.tasks.reduce((s, t) => s + (t.estimatedDurationDays ?? 0), 0);
+  const overdueTasks = tasks.filter((t) => t.deadline && isOverdue(t.deadline, t.status));
+  const scopeUsed = tasks.reduce((s, t) => s + (t.estimatedDurationDays ?? 0), 0);
   const scopeTotal = complaint.scopeDefinition?.estimatedDuration ?? 0;
   const scopePercent = scopeTotal > 0 ? Math.min(100, (scopeUsed / scopeTotal) * 100) : 0;
 
@@ -103,20 +120,22 @@ export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefre
   const canEscalate = !['closed', 'escalated'].includes(complaint.status);
   const canClose = !['closed', 'pending'].includes(complaint.status);
 
-  // ── API handlers ───────────────────────────────────────────────────────────
+  const badgePriority = complaint.priority ?? null;
+  const rawImagePath = complaint.attachments?.[0]?.url ?? complaint.imageData ?? null;
+  const backendOrigin = axiosInstance.defaults.baseURL.replace(/\/api\/?$/, '');
+  const attachmentUrl = rawImagePath ?
+    rawImagePath.startsWith('http') ? rawImagePath : `${backendOrigin}${rawImagePath}` :
+    null;
 
   const callApi = async (fn, optimisticUpdate) => {
     setActionLoading(true);
     setApiError(null);
     try {
       const res = await fn();
-      if (res.success && res.data) {
-        // Use real API response if it contains the complaint
-        const updated = res.data.status ? res.data : optimisticUpdate(res.data);
-        onRefresh(complaint._id, updated);
-      } else if (!res.success) {
-        // Fall back to optimistic update when API is unreachable (demo mode)
-        const optimistic = optimisticUpdate({});
+      if (res.success) {
+        await refreshComplaintData();
+      } else {
+        const optimistic = optimisticUpdate(res.data ?? {});
         onRefresh(complaint._id, optimistic);
       }
     } catch {
@@ -176,7 +195,7 @@ export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefre
           notes: data.notes,
           createdAt: new Date().toISOString(),
         };
-        return { ...complaint, tasks: [...complaint.tasks, newTask] };
+        return { ...complaint, tasks: [...(complaint.tasks ?? []), newTask] };
       }
     );
   };
@@ -186,7 +205,7 @@ export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefre
       () => managementService.assignTask(_complaintId, taskId, data),
       () => ({
         ...complaint,
-        tasks: complaint.tasks.map((t) =>
+        tasks: (complaint.tasks ?? []).map((t) =>
           t._id === taskId ? { ...t, assigneeId: data.technicianId, assigneeName: data.technicianName, assignedAt: new Date().toISOString() } : t
         ),
       })
@@ -241,12 +260,12 @@ export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefre
       <Sheet open={!!complaint} onOpenChange={(v) => !v && onClose()}>
         <SheetContent side="right" className="w-full sm:max-w-xl lg:max-w-2xl flex flex-col overflow-hidden p-0">
           {/* Header */}
-          <div className="bg-[#1e3a5f] text-white px-5 py-4 shrink-0">
+          <div className="bg-[#e8fbf4] text-slate-900 px-5 py-4 shrink-0 border-b border-slate-200">
             <SheetHeader>
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center flex-wrap gap-1.5 mb-1.5">
-                    <span className="font-mono text-xs text-blue-200">{complaint.complaintId}</span>
+                    <span className="font-mono text-xs text-slate-500">{complaint.complaintId}</span>
                     <span
                       className={`
                         text-xs px-2 py-0.5 rounded-full border font-medium whitespace-nowrap
@@ -255,22 +274,23 @@ export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefre
                     >
                       {STATUS_LABELS[complaint.status] ?? complaint.status.replace(/[_-]/g, ' ')}
                     </span>
-                    <span
-                      className={`
-                        text-xs px-2 py-0.5 rounded-full border font-medium whitespace-nowrap
-                        ${PRIORITY_COLORS[complaint.priority] ?? 'bg-slate-100 text-slate-700 border-slate-300'}
-                      `}
-                    >
-                      {complaint.priority}
-                    </span>
+                    {badgePriority ? (
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${PRIORITY_COLORS[badgePriority]}`}
+                      >
+                        {badgePriority}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
                   </div>
-                  <SheetTitle className="text-white leading-tight text-base">{complaint.title}</SheetTitle>
-                  <p className="text-blue-200 text-xs mt-1 flex items-center gap-1">
+                  <SheetTitle className="text-slate-900 leading-tight text-base">{complaint.title}</SheetTitle>
+                  <p className="text-slate-600 text-xs mt-1 flex items-center gap-1">
                     <MapPin className="h-3 w-3 shrink-0" />
                     <span className="line-clamp-1">{complaint.location}</span>
                   </p>
                 </div>
-                {actionLoading && <Loader2 className="h-4 w-4 animate-spin text-blue-300 shrink-0 mt-1" />}
+                {actionLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-500 shrink-0 mt-1" />}
               </div>
             </SheetHeader>
 
@@ -286,42 +306,42 @@ export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefre
             <div className="flex flex-wrap gap-1.5 mt-3">
               {canDefineScope && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs bg-white/10 border-white/30 text-white hover:bg-white/20"
+                  className="h-7 text-xs rounded-md border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100"
                   onClick={() => setActiveModal('scope')} disabled={actionLoading}>
                   <ClipboardList className="h-3 w-3 mr-1" />Define Scope
                 </Button>
               )}
               {canAssignComplaint && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs bg-white/10 border-white/30 text-white hover:bg-white/20"
+                  className="h-7 text-xs rounded-md border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100"
                   onClick={() => setActiveModal('assignComplaint')} disabled={actionLoading}>
                   <User className="h-3 w-3 mr-1" />Assign
                 </Button>
               )}
               {canCreateTask && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs bg-white/10 border-white/30 text-white hover:bg-white/20"
+                  className="h-7 text-xs rounded-md border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100"
                   onClick={() => setActiveModal('createTask')} disabled={actionLoading}>
                   <Plus className="h-3 w-3 mr-1" />New Task
                 </Button>
               )}
               {canRework && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs bg-amber-400/20 border-amber-300/50 text-amber-200 hover:bg-amber-400/30"
+                  className="h-7 text-xs rounded-md border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
                   onClick={() => setActiveModal('rework')} disabled={actionLoading}>
                   <RotateCcw className="h-3 w-3 mr-1" />Rework
                 </Button>
               )}
               {canEscalate && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs bg-orange-400/20 border-orange-300/50 text-orange-200 hover:bg-orange-400/30"
+                  className="h-7 text-xs rounded-md border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
                   onClick={() => setActiveModal('escalate')} disabled={actionLoading}>
                   <TrendingUp className="h-3 w-3 mr-1" />Escalate
                 </Button>
               )}
               {canClose && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs bg-emerald-400/20 border-emerald-300/50 text-emerald-200 hover:bg-emerald-400/30"
+                  className="h-7 text-xs rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                   onClick={() => setActiveModal('close')} disabled={actionLoading}>
                   <CheckCircle2 className="h-3 w-3 mr-1" />Close
                 </Button>
@@ -362,7 +382,7 @@ export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefre
                   {[
                     { icon: Tag, label: 'Category', value: complaint.category },
                     { icon: AlertCircle, label: 'Urgency', value: complaint.urgency },
-                    { icon: User, label: 'Submitted by', value: complaint.user?.name ?? '—' },
+                    { icon: User, label: 'Submitted by', value: complaint.user?.name ?? complaint.history?.find((h) => h.action === 'submitted')?.byName ?? '—' },
                     { icon: Calendar, label: 'Date submitted', value: formatDate(complaint.createdAt) },
                   ].map(({ icon: Icon, label, value }) => (
                     <div key={label} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
@@ -380,6 +400,12 @@ export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefre
                     {complaint.description}
                   </p>
                 </div>
+
+                {attachmentUrl && (
+                  <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+                    <img src={attachmentUrl} alt="Complaint attachment" className="w-full h-auto object-contain" />
+                  </div>
+                )}
 
                 {complaint.slaDeadline && (
                   <div className={`rounded-lg p-3 border ${new Date(complaint.slaDeadline) < new Date() ? 'bg-rose-50 border-rose-200' : 'bg-sky-50 border-sky-200'}`}>
@@ -506,7 +532,7 @@ export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefre
                   </Button>
                 )}
 
-                {complaint.tasks.length === 0 ? (
+                {tasks.length === 0 ? (
                   <div className="text-center py-10">
                     <Wrench className="h-10 w-10 text-slate-200 mx-auto mb-2" />
                     <p className="text-sm text-slate-400">No tasks yet</p>
@@ -516,7 +542,7 @@ export function ComplaintDetailDrawer({ complaint, technicians, onClose, onRefre
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {complaint.tasks.map((task) => {
+                    {tasks.map((task) => {
                       const taskOverdue = task.deadline ? isOverdue(task.deadline, task.status) : false;
                       const ts = TASK_STATUS_DISPLAY[task.status] ?? { label: task.status, color: 'bg-slate-100 text-slate-600' };
                       return (

@@ -24,7 +24,9 @@ let db;
 let client;
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -64,7 +66,12 @@ app.use('/api', (req, res, next) => {
 
 // Static file serving for uploads
 const __dirname = process.cwd();
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Ensure uploaded files always carry a permissive CORP header so the SPA (different origin/port)
+// can load images without being blocked by the browser's resource policy.
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
 

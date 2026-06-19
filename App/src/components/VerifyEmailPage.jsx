@@ -138,7 +138,10 @@ export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
 
         <form onSubmit={handleVerify}>
           <div className="mb-5">
+            <label htmlFor="verificationToken" className="block text-sm font-medium text-slate-700 mb-2">Verification code</label>
             <input
+              id="verificationToken"
+              name="verificationToken"
               type="text"
               value={verificationToken}
               onChange={(e) => setVerificationToken(e.target.value)}
@@ -146,6 +149,7 @@ export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
               className="w-full px-4 py-3 border border-[rgba(0,0,0,0.1)] bg-white text-[#1F2937] text-center text-lg tracking-wider focus:outline-none focus:border-[#7B1A1A] focus:ring-0"
               style={{ borderRadius: '0px' }}
               required
+              autoComplete="one-time-code"
               autoFocus
             />
           </div>

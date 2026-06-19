@@ -154,8 +154,10 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit}>
             <div className="mb-6">
-              <label className="block text-sm text-[#1F2937] mb-2">Email</label>
+              <label htmlFor="loginEmail" className="block text-sm text-[#1F2937] mb-2">Email</label>
               <input
+                id="loginEmail"
+                name="email"
                 type="email"
                 value={formData.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
@@ -163,14 +165,17 @@ export default function LoginPage() {
                 className="w-full px-4 py-3 border border-[rgba(0,0,0,0.1)] bg-white text-[#1F2937] focus:outline-none focus:border-[#7B1A1A]"
                 style={{ borderRadius: '0px' }}
                 disabled={isLoading}
+                autoComplete="email"
                 autoFocus
               />
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm text-[#1F2937] mb-2">Password</label>
+              <label htmlFor="loginPassword" className="block text-sm text-[#1F2937] mb-2">Password</label>
               <div className="relative">
                 <input
+                  id="loginPassword"
+                  name="password"
                   type={showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={(e) => handleInputChange('password', e.target.value)}
@@ -178,6 +183,7 @@ export default function LoginPage() {
                   className="w-full px-4 py-3 pr-12 border border-[rgba(0,0,0,0.1)] bg-white text-[#1F2937] focus:outline-none focus:border-[#7B1A1A]"
                   style={{ borderRadius: '0px' }}
                   disabled={isLoading}
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
@@ -192,8 +198,10 @@ export default function LoginPage() {
             </div>
 
             <div className="flex justify-between items-center mb-8">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label htmlFor="loginRememberMe" className="flex items-center gap-2 cursor-pointer">
                 <input
+                  id="loginRememberMe"
+                  name="rememberMe"
                   type="checkbox"
                   checked={formData.rememberMe}
                   onChange={(e) => handleInputChange('rememberMe', e.target.checked)}

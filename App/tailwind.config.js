@@ -20,6 +20,8 @@ export default {
           800: '#5A1313',
           900: '#3D0D0D',
         },
+        popover: 'rgb(255 255 255 / 0.98)',
+        'popover-foreground': '#000000',
       },
       animation: {
         'fade-in-0': 'fadeIn 0.2s ease-out',

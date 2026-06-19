@@ -42,21 +42,29 @@ export default function ResetPasswordPage() {
       <div className="max-w-md w-full bg-white p-8">
         <h1 className="text-2xl font-bold mb-4">Reset Password</h1>
         <form onSubmit={handleSubmit}>
+          <label htmlFor="resetPassword" className="block text-sm font-medium text-slate-700 mb-2">New password</label>
           <input
+            id="resetPassword"
+            name="password"
             type="password"
             placeholder="New password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full p-3 border mb-4"
             required
+            autoComplete="new-password"
           />
+          <label htmlFor="resetConfirmPassword" className="block text-sm font-medium text-slate-700 mb-2">Confirm password</label>
           <input
+            id="resetConfirmPassword"
+            name="confirmPassword"
             type="password"
             placeholder="Confirm password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             className="w-full p-3 border mb-4"
             required
+            autoComplete="new-password"
           />
           {error && <p className="text-red-500 mb-4">{error}</p>}
           {message && <p className="text-green-500 mb-4">{message}</p>}

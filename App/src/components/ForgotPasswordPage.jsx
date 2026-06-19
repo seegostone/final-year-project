@@ -34,13 +34,17 @@ export default function ForgotPasswordPage() {
       <div className="max-w-md w-full bg-white p-8">
         <h1 className="text-2xl font-bold mb-4">Forgot Password</h1>
         <form onSubmit={handleSubmit}>
+          <label htmlFor="forgotPasswordEmail" className="block text-sm font-medium text-slate-700 mb-2">Email</label>
           <input
+            id="forgotPasswordEmail"
+            name="email"
             type="email"
             placeholder="Enter your email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full p-3 border mb-4"
             required
+            autoComplete="email"
           />
           {error && <p className="text-red-500 mb-4">{error}</p>}
           {message && <p className="text-green-500 mb-4">{message}</p>}

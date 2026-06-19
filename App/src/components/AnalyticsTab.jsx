@@ -1,16 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 
 export default function AnalyticsTab({ stats, complaints }) {
-  const byCategory = complaints.reduce((acc, c) => {
+  const byCategory = (complaints ?? []).reduce((acc, c) => {
     acc[c.category] = (acc[c.category] ?? 0) + 1;
     return acc;
   }, {});
 
-  const taskStats = complaints.reduce(
+  const taskStats = (complaints ?? []).reduce(
     (acc, c) => {
-      acc.total += c.tasks.length;
-      acc.done += c.tasks.filter((t) => t.status === 'done').length;
-      acc.overdue += c.tasks.filter((t) => t.status !== 'done' && t.deadline && new Date(t.deadline) < new Date()).length;
+      const tasks = c.tasks ?? [];
+      acc.total += tasks.length;
+      acc.done += tasks.filter((t) => t.status === 'done').length;
+      acc.overdue += tasks.filter((t) => t.status !== 'done' && t.deadline && new Date(t.deadline) < new Date()).length;
       return acc;
     },
     { total: 0, done: 0, overdue: 0 }

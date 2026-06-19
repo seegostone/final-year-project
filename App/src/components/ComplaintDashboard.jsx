@@ -517,18 +517,20 @@ export default function ComplaintDashboard() {
                   {timeFilter === 'custom' && (
                     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <label className="space-y-2 text-sm font-medium text-slate-700">
+                        <label htmlFor="customStartDate" className="space-y-2 text-sm font-medium text-slate-700">
                           Start date
                           <input
+                            id="customStartDate" name="customStartDate"
                             type="date"
                             value={customStartDate}
                             onChange={(event) => setCustomStartDate(event.target.value)}
                             className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                           />
                         </label>
-                        <label className="space-y-2 text-sm font-medium text-slate-700">
+                        <label htmlFor="customEndDate" className="space-y-2 text-sm font-medium text-slate-700">
                           End date
                           <input
+                            id="customEndDate" name="customEndDate"
                             type="date"
                             value={customEndDate}
                             onChange={(event) => setCustomEndDate(event.target.value)}
@@ -636,14 +638,16 @@ export default function ComplaintDashboard() {
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="grid gap-5 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Complaint Title</label>
+                      <label htmlFor="title" className="text-sm font-medium text-slate-700">Complaint Title</label>
                       <input
+                        id="title" name="title"
                         type="text"
                         value={values.title}
                         onChange={(event) => handleChange('title', event.target.value)}
                         onBlur={() => handleBlur('title')}
                         className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
                         placeholder="e.g., Water leak in block C"
+                        autoComplete="organization-title"
                       />
                       {touched.title && errors.title && (
                         <p className="text-xs text-rose-600">{errors.title}</p>
@@ -651,14 +655,16 @@ export default function ComplaintDashboard() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Location</label>
+                      <label htmlFor="location" className="text-sm font-medium text-slate-700">Location</label>
                       <input
+                        id="location" name="location"
                         type="text"
                         value={values.location}
                         onChange={(event) => handleChange('location', event.target.value)}
                         onBlur={() => handleBlur('location')}
                         className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
                         placeholder="e.g., Block C, Floor 2"
+                        autoComplete="street-address"
                       />
                       {touched.location && errors.location && (
                         <p className="text-xs text-rose-600">{errors.location}</p>
@@ -667,8 +673,9 @@ export default function ComplaintDashboard() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">Category</label>
+                    <label htmlFor="category" className="text-sm font-medium text-slate-700">Category</label>
                     <select
+                      id="category" name="category"
                       value={values.category}
                       onChange={(event) => handleChange('category', event.target.value)}
                       onBlur={() => handleBlur('category')}
@@ -686,8 +693,9 @@ export default function ComplaintDashboard() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">Description</label>
+                    <label htmlFor="description" className="text-sm font-medium text-slate-700">Description</label>
                     <textarea
+                      id="description" name="description"
                       value={values.description}
                       onChange={(event) => handleChange('description', event.target.value)}
                       onBlur={() => handleBlur('description')}
@@ -702,8 +710,9 @@ export default function ComplaintDashboard() {
 
                   <div className="grid gap-5 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Urgency Level</label>
+                      <label htmlFor="urgency" className="text-sm font-medium text-slate-700">Urgency Level</label>
                       <select
+                        id="urgency" name="urgency"
                         value={values.urgency}
                         onChange={(event) => handleChange('urgency', event.target.value)}
                         className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
@@ -717,8 +726,9 @@ export default function ComplaintDashboard() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Attachment</label>
+                      <label htmlFor="image" className="text-sm font-medium text-slate-700">Attachment</label>
                       <input
+                        id="image" name="image"
                         type="file"
                         accept="image/*"
                         onChange={(event) => handleFileChange(event.target.files?.[0] || null)}
@@ -770,8 +780,9 @@ export default function ComplaintDashboard() {
 
               <div className="mb-5 flex flex-col gap-3 sm:flex-row">
                 <div className="relative flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
+                    id="searchQuery" name="searchQuery"
                     type="search"
                     value={searchQuery}
                     onChange={(event) => {
@@ -779,6 +790,7 @@ export default function ComplaintDashboard() {
                       setPagination((prev) => ({ ...prev, currentPage: 1 }));
                     }}
                     placeholder="Search complaints..."
+                    aria-label="Search complaints"
                     className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
                   />
                 </div>

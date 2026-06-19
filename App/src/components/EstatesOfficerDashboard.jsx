@@ -92,8 +92,9 @@ export default function EstatesOfficerDashboard() {
   // drawer
   const [selected, setSelected] = useState(null);
 
-  // current user not required in this component
+  // Ref guards for debounce and mount state
   const debounceRef = useRef(null);
+  const mountedRef = useRef(false);
 
   // ── fetch queue ────────────────────────────────────────────────────────────
 
@@ -183,21 +184,21 @@ export default function EstatesOfficerDashboard() {
   // ── re-fetch on filter/page change with search debounce ───────────────────
 
   useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       fetchQueue(1);
     }, 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [search, fetchQueue]);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [search, statusFilter, priorityFilter, categoryFilter, fetchQueue]);
 
   useEffect(() => {
-    // filters changed — fetch first page (defer to avoid sync setState in effect)
-    const id = setTimeout(() => fetchQueue(1), 0);
-    return () => clearTimeout(id);
-  }, [statusFilter, priorityFilter, categoryFilter, fetchQueue]);
-
-  useEffect(() => {
-    // defer to avoid sync setState-in-effect warning
     const id = setTimeout(() => fetchQueue(page), 0);
     return () => clearTimeout(id);
   }, [page, fetchQueue]);
