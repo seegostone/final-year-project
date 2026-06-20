@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, ChevronDown, XCircle, Layers, Clock, Clipboard, CheckCircle } from 'lucide-react';
+import { Search, XCircle, Layers, Clock, Clipboard, CheckCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import Header from '../components/Header';
@@ -38,16 +38,30 @@ export function TechnicianDashboard() {
     }
   };
 
-  // Fetch tasks on component mount and refresh after task unassign events
-  useEffect(() => {
-    fetchTasks();
 
-    const unsubscribe = onTaskUnassigned(() => {
-      fetchTasks(false);
-    });
+// Fetch tasks on component mount and refresh after task unassign events
+useEffect(() => {
+  let mounted = true;
 
-    return () => unsubscribe();
-  }, []);
+  const run = async () => {
+    if (mounted) {
+      await fetchTasks();
+    }
+  };
+
+  run();
+
+  const unsubscribe = onTaskUnassigned(() => {
+    fetchTasks(false);
+  });
+
+  return () => {
+    mounted = false;
+    unsubscribe();
+  };
+}, []);
+
+
 
   const filteredTasks = tasks.filter(task => {
     const normalizedQuery = searchQuery.toLowerCase();
