@@ -6,6 +6,7 @@ import {
   defineScopeComplaint,
   createTask,
   assignTask,
+  unassignTask,
   getManagementQueue,
   getDashboardStats,
   performQualityCheck,
@@ -234,6 +235,7 @@ router.post('/:id/scope', defineScopeValidation, defineScopeComplaint);
 // Task endpoints
 router.post('/:id/tasks', createTaskValidation, createTask);
 router.post('/:id/tasks/:taskId/assign', assignTaskValidation, assignTask);
+router.post('/:id/tasks/:taskId/unassign', unassignTask);
 router.patch('/:id/tasks/:taskId/status', updateTaskStatusValidation, updateTaskStatus);
 // Queue & Dashboard
 router.get('/queue', getManagementQueue);

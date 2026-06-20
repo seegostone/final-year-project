@@ -19,7 +19,7 @@ export function TaskDetail() {
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);// need to track submission state for actions like start work, resolve, or pending
   const [taskStatus, setTaskStatus] = useState(null);
   const [showWorkReport, setShowWorkReport] = useState(false);
   const [showIssueNotes, setShowIssueNotes] = useState(false);
@@ -180,6 +180,15 @@ export function TaskDetail() {
   const dueDate = new Date(task.dueDate || task.deadline);
   const daysLeft = Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
   const complaintLabel = task.complaintLabel || task.complaintId || complaintId;
+  
+  // Build readable task code: prefer backend taskCode, fallback to generated format, then raw ID
+  let displayTaskCode = task.taskCode;
+  if (!displayTaskCode && task.taskNumber && complaintLabel) {
+    displayTaskCode = `${complaintLabel}-TASK-${String(task.taskNumber).padStart(3, '0')}`;
+  }
+  if (!displayTaskCode) {
+    displayTaskCode = task.id || taskId;
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -224,7 +233,10 @@ export function TaskDetail() {
                 </div>
               </div>
               <div className="mb-4 text-sm text-slate-500">
-                Complaint: <span className="font-mono text-[#1e2937]">{task.complaintLabel || task.complaintId || complaintId}</span>
+                Complaint: <span className="font-mono text-[#1e2937]">{complaintLabel}</span>
+              </div>
+              <div className="mb-4 text-sm text-slate-500">
+                Task: <span className="font-mono text-[#1e2937]">{displayTaskCode}</span>
               </div>
               <div className="mb-6">
                 <h3 className="text-[#94a3b8] mb-2" style={{ fontSize: '12px', fontWeight: 500, letterSpacing: '0.5px' }}>
@@ -365,7 +377,7 @@ export function TaskDetail() {
         isOpen={showWorkReport}
         onClose={() => setShowWorkReport(false)}
         onSubmit={handleResolve}
-        taskId={complaintLabel}
+        taskId={displayTaskCode}
         taskTitle={task.title}
       />
 
@@ -373,7 +385,7 @@ export function TaskDetail() {
         isOpen={showIssueNotes}
         onClose={() => setShowIssueNotes(false)}
         onSubmit={handlePending}
-        taskId={complaintLabel}
+        taskId={displayTaskCode}
         taskTitle={task.title}
       />
 
@@ -381,7 +393,7 @@ export function TaskDetail() {
         <ConfirmationModal
           isOpen={showConfirmation}
           type={confirmationType}
-          taskId={complaintLabel}
+          taskId={displayTaskCode}
           taskTitle={task.title}
           data={confirmationData}
         />

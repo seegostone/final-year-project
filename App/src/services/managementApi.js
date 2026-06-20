@@ -371,6 +371,25 @@ const managementService = {
     }
   },
 
+  // Unassign a technician from a task
+  async unassignTask(complaintId, taskId) {
+    try {
+      const response = await axiosInstance.post(
+        `/management/${complaintId}/tasks/${taskId}/unassign`
+      );
+
+      return {
+        success: true,
+        data: response.data || response,
+        message: response.message,
+      };
+    } catch (error) {
+      console.error('Unassign task error:', error);
+      const formattedError = handleApiError(error);
+      return { success: false, error: formattedError.message, type: formattedError.type };
+    }
+  },
+
 
   // Close complaint
   async closeComplaint(complaintId, data) {

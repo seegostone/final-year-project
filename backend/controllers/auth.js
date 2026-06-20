@@ -35,11 +35,15 @@ export const register = async (req, res) => {
   const { name, email, password, role, phoneNumber, specialization, zone, skills } = req.body;
   const db = req.app.locals.db;
 
+  // Trim and normalize specialization and zone
+  const trimmedSpecialization = specialization ? specialization.trim() : '';
+  const trimmedZone = zone ? zone.trim() : '';
+
   const normalizedSkills = Array.isArray(skills)
     ? skills.map((skill) => skill.trim()).filter(Boolean)
     : typeof skills === 'string'
-    ? skills.split(',').map((skill) => skill.trim()).filter(Boolean)
-    : [];
+      ? skills.split(',').map((skill) => skill.trim()).filter(Boolean)
+      : [];
 
   try {
     // Check if user already exists
@@ -62,8 +66,8 @@ export const register = async (req, res) => {
       password: hashedPassword,
       role: role || 'user',
       phoneNumber,
-      specialization,
-      zone,
+      specialization: trimmedSpecialization || null,
+      zone: trimmedZone || null,
       skills: normalizedSkills,
       isActive: true,
       emailVerified: false,
@@ -108,6 +112,9 @@ export const register = async (req, res) => {
 // @desc    Login user
 // @route   POST /api/auth/login
 // @access  Public
+const normalizeEmailVerified = (user) =>
+  user?.emailVerified ?? user?.isEmailVerified ?? false;
+
 export const login = async (req, res) => {
   // Check for validation errors
   const errors = validationResult(req);
@@ -132,6 +139,8 @@ export const login = async (req, res) => {
         message: 'Invalid credentials',
       });
     }
+
+    user.emailVerified = normalizeEmailVerified(user);
 
     // Check if password matches
     const isMatch = await passwordUtils.comparePassword(

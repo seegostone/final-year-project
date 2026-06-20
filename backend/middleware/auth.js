@@ -7,6 +7,9 @@ const normalizeRole = (role) =>
     .toLowerCase()
     .replace(/\s+/g, '_');
 
+const normalizeEmailVerified = (user) =>
+  user?.emailVerified ?? user?.isEmailVerified ?? false;
+
 // Protect routes - require authentication
 export const protect = async (req, res, next) => {
   let token;
@@ -32,7 +35,7 @@ export const protect = async (req, res, next) => {
 
   try {
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'test_jwt_secret');
 
     req.user = await userOperations.findById(req.app.locals.db, decoded.id);
 
@@ -44,6 +47,8 @@ export const protect = async (req, res, next) => {
     }
 
     req.user.normalizedRole = normalizeRole(req.user.role);
+    req.user.emailVerified = normalizeEmailVerified(req.user);
+    req.user.isEmailVerified = req.user.emailVerified;
 
     // Check if user is active
     if (!req.user.isActive) {

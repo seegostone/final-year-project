@@ -24,6 +24,14 @@ export function TaskCard({ task, delay = 0 }) {
     : statusBorderColors[displayStatus] || 'border-l-[3px] border-l-gray-300';
 
   const complaintSegment = task.complaintLabel || task.complaintId || task.id;
+    // Build readable task code: prefer backend taskCode, fallback to generated format, then raw ID
+  let displayTaskCode = task.taskCode;
+  if (!displayTaskCode && task.taskNumber && task.complaintLabel) {
+    displayTaskCode = `${task.complaintLabel}-TASK-${String(task.taskNumber).padStart(3, '0')}`;
+  }
+  if (!displayTaskCode) {
+    displayTaskCode = task.id || task.taskId;
+  }
 
   return (
     <motion.div
@@ -44,9 +52,14 @@ export function TaskCard({ task, delay = 0 }) {
         <PriorityBadge priority={task.priority} />
       </div>
 
-      <div className="flex items-center gap-2 text-[#475569] mb-3" style={{ fontSize: '14px' }}>
+      <div className="flex flex-wrap items-center gap-2 text-[#475569] mb-3" style={{ fontSize: '14px' }}>
         <MapPin className="w-4 h-4" />
         <span>{task.location}</span>
+        {task.taskCode && (
+          <span className="font-mono text-xs text-[#64748b] bg-slate-100 px-2 py-1 rounded">
+            {`${displayTaskCode}ssewanted`}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center justify-between">
@@ -59,10 +72,13 @@ export function TaskCard({ task, delay = 0 }) {
       </div>
 
       <div className="mt-3 pt-3 border-t border-[#e2e8f0]">
-        <span className="font-mono text-[#94a3b8]" style={{ fontSize: '10px' }}>
-          {task.complaintLabel || task.complaintId || task.id}
+        {/* Show human-readable task code in footer; fallback to complaint label if needed */}
+        <span className="font-mono text-[#0d8b18]" style={{ fontSize: '10px' }}>
+          {`${displayTaskCode}ssewanted`}
         </span>
       </div>
     </motion.div>
   );
 }
+
+

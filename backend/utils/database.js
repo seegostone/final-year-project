@@ -44,6 +44,11 @@ async function getNextSequence(db, name) {
   }
 }
 
+async function getNextTaskSequence(db, complaintId) {
+  const counterName = `complaintTaskCounter:${complaintId}`;
+  return await getNextSequence(db, counterName);
+}
+
 function buildCreatedAtFilter(timeRange, startDate, endDate) {
   if (!timeRange || timeRange === 'all') return null;
 
@@ -200,13 +205,13 @@ export const userOperations = {
       _id: new ObjectId(),
       role: normalizedRole || 'user',
       normalizedRole: normalizedRole || 'user',
-      specialization: userData.specialization || null,
-      zone: userData.zone || null,
+      specialization: (userData.specialization && userData.specialization.trim()) || null,
+      zone: (userData.zone && userData.zone.trim()) || null,
       skills: Array.isArray(userData.skills)
-        ? userData.skills
+        ? userData.skills.filter(Boolean)
         : userData.skills
-        ? [userData.skills]
-        : [],
+          ? [userData.skills]
+          : [],
       isActive: true,
       lastLogin: null,
       resetPasswordToken: null,
@@ -273,6 +278,7 @@ export const userOperations = {
       ? user.skills.map((skill) => normalize(skill))
       : [];
 
+    if (!specialization && skills.length === 0) return true;
     if (specialization === categoryKey) return true;
     if (normalize(user.trade) === categoryKey) return true;
     if (skills.includes(categoryKey)) return true;
@@ -925,10 +931,6 @@ export const managementOperations = {
   },
 
 
-
-
-
-
   // ── addTaskToComplaint (ENHANCED) ────────────────────────────
   // Replace the existing addTaskToComplaint inside managementOperations
 
@@ -961,8 +963,13 @@ export const managementOperations = {
     const allowedPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
     const priority = allowedPriorities.includes(taskData.priority) ? taskData.priority : 'MEDIUM';
 
+    const taskNumber = await getNextTaskSequence(db, complaint._id.toString());
+    const taskCode = `${complaint.complaintId || 'CMP-000'}-TASK-${String(taskNumber).padStart(3, '0')}`;
+
     const task = {
       _id: new ObjectId(),
+      taskNumber,
+      taskCode,
       title: taskData.title || 'Task',
       description: taskData.description || '',
       status: 'open',           // open | in_progress | done | blocked
@@ -1002,7 +1009,7 @@ export const managementOperations = {
   },
 
 
-  // ── updateTaskStatus (NEW) ───────────────────────────────────
+
   // Add this as a new method inside managementOperations
 
   async updateTaskStatus(db, complaintId, taskId, statusData, updatedBy) {
@@ -1189,17 +1196,15 @@ export const managementOperations = {
   // Unassign a technician from a specific task inside a complaint
   async unassignTaskFromComplaint(db, complaintId, taskId, unassignedBy) {
     const complaints = db.collection('complaints');
-    const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
-    if (!complaint) return null;
 
-    const task = (complaint.tasks || []).find((t) => t._id.toString() === new ObjectId(taskId).toString());
-    if (!task) return null;
-    if (!task.assigneeId) return null; // nothing to unassign
-
-    const previousAssigneeName = task.assigneeName || null;
-
+    // Try to update atomically, only if task exists, is not done, and has an assignee
     const result = await complaints.updateOne(
-      { _id: new ObjectId(complaintId), 'tasks._id': new ObjectId(taskId) },
+      {
+        _id: new ObjectId(complaintId),
+        'tasks._id': new ObjectId(taskId),
+        'tasks.status': { $ne: 'done' },
+        'tasks.assigneeId': { $ne: null }
+      },
       {
         $set: {
           'tasks.$.assigneeId': null,
@@ -1210,12 +1215,12 @@ export const managementOperations = {
         $push: {
           history: buildHistoryEntry({
             action: 'task_unassigned',
-            from: complaint.status,
-            to: complaint.status,
+            from: 'assigned',
+            to: 'unassigned',
             by: unassignedBy,
             byName: 'Estates Officer',
             byRole: 'estates_officer',
-            note: `Task ${taskId} unassigned${previousAssigneeName ? ` (was ${previousAssigneeName})` : ''}`,
+            note: `Task ${taskId} unassigned`,
           }),
         },
       }
@@ -1224,7 +1229,8 @@ export const managementOperations = {
     if (result.modifiedCount === 0) return null;
 
     return await complaints.findOne({ _id: new ObjectId(complaintId) });
-  },
+  }
+  ,
 
   // Get management queue (Phase 2)
   async getManagementQueue(

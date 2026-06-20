@@ -5,7 +5,8 @@ dotenv.config({ path: '.env.test' });
 
 // Set test environment
 process.env.NODE_ENV = 'test';
-process.env.MONGODB_URI = 'mongodb://localhost:27017/finalyearproject_test';
+const workerId = process.env.JEST_WORKER_ID || '1';
+process.env.MONGODB_URI = `mongodb://localhost:27017/finalyearproject_test_${workerId}`;
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret';
 
 // Global test setup

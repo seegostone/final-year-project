@@ -346,11 +346,23 @@ export const updateTaskStatus = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
       }
 
+      // Prevent assigning if task already has an assignee
+      const complaintDoc = await db.collection('complaints').findOne({ _id: new ObjectId(complaintId) });
+      const targetTask = (complaintDoc?.tasks || []).find((t) => t._id.toString() === new ObjectId(taskId).toString());
+      if (!targetTask) {
+        return res.status(404).json({ success: false, message: 'Task not found' });
+      }
+      if (targetTask.assigneeId) {
+        return res.status(400).json({ success: false, message: 'Task already has an assignee' });
+      }
+
       const isEligible = await userOperations.isTechnicianEligible(
         db,
         technicianId,
-        complaint?.category || null
+        complaintDoc?.category || null
       );
+
+      console.log('DEBUG assign: category=', complaintDoc?.category, 'technicianId=', technicianId, 'eligible=', isEligible);
 
       if (!isEligible) {
         return res.status(400).json({

@@ -96,6 +96,9 @@ export const authService = {
         password: userData.password,
         role: userData.role,
         phoneNumber: userData.phoneNumber,
+        specialization: userData.specialization,
+        zone: userData.zone,
+        skills: userData.skills,
       };
       
       const response = await axiosInstance.post('/auth/register', payload);

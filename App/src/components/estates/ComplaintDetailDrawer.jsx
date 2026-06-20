@@ -15,8 +15,7 @@ import {
 } from './EstatesModals';
 import managementService from '../../services/managementApi';
 import complaintService from '../../services/complaintsApi';
-import axiosInstance from '../../services/axios';
-
+import axiosInstance from '../../services/axios';import { emitTaskUnassigned } from '../../utils/eventBus';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(iso) {
@@ -126,19 +125,27 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
     rawImagePath.startsWith('http') ? rawImagePath : `${backendOrigin}${rawImagePath}` :
     null;
 
-  const callApi = async (fn, optimisticUpdate) => {
+  const callApi = async (fn, optimisticUpdate = null, onSuccess = null) => {
     setActionLoading(true);
     setApiError(null);
     try {
       const res = await fn();
       if (res.success) {
+        if (typeof onSuccess === 'function') {
+          onSuccess(res.data);
+        }
         await refreshComplaintData();
-      } else {
+        return res;
+      }
+      if (typeof optimisticUpdate === 'function') {
         const optimistic = optimisticUpdate(res.data ?? {});
         onRefresh(complaint._id, optimistic);
       }
-    } catch {
+      return res;
+    } catch (err) {
+      console.error('API call failed:', err);
       setApiError('Action could not be completed. Please try again.');
+      return { success: false };
     } finally {
       setActionLoading(false);
     }
@@ -178,8 +185,15 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
         assigneeName: data.assigneeName,
       }),
       () => {
+        // Create an optimistic task representation that includes a human-friendly taskCode
+        const nextNumber = (complaint.tasks ?? []).length + 1;
+        const complaintLabel = complaint.complaintId || 'CMP-000';
+        const optimisticTaskCode = `${complaintLabel}-TASK-${String(nextNumber).padStart(3, '0')}`;
+
         const newTask = {
           _id: `task_${Date.now()}`,
+          taskNumber: nextNumber,
+          taskCode: optimisticTaskCode,
           title: data.title,
           description: data.description,
           status: 'open',
@@ -194,6 +208,7 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
           notes: data.notes,
           createdAt: new Date().toISOString(),
         };
+
         return { ...complaint, tasks: [...(complaint.tasks ?? []), newTask] };
       }
     );
@@ -208,6 +223,19 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
           t._id === taskId ? { ...t, assigneeId: data.technicianId, assigneeName: data.technicianName, assignedAt: new Date().toISOString() } : t
         ),
       })
+    );
+  };
+
+  const handleUnassignTask = async (_complaintId, taskId) => {
+    const confirmed = window.confirm('Unassign technician from this task? This will reopen the task.');
+    if (!confirmed) return;
+
+    await callApi(
+      () => managementService.unassignTask(_complaintId, taskId),
+      null,
+      () => {
+        emitTaskUnassigned(taskId, _complaintId);
+      }
     );
   };
 
@@ -519,6 +547,16 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                 ) : (
                   <div className="space-y-2">
                     {tasks.map((task) => {
+                      // Build readable task code: prefer stored `taskCode`, then `taskNumber` with complaint label, otherwise fallback to string id
+                      let displayTaskCode = null;
+                      if (task.taskCode) {
+                        displayTaskCode = task.taskCode;
+                      } else if (typeof task.taskNumber === 'number' || task.taskNumber) {
+                        const complaintLabel = complaint.complaintId || 'CMP-000';
+                        displayTaskCode = `${complaintLabel}-TASK-${String(task.taskNumber).padStart(3, '0')}`;
+                      } else {
+                        displayTaskCode = task._id?.toString();
+                      }
                       const taskOverdue = task.deadline ? isOverdue(task.deadline, task.status) : false;
                       const ts = TASK_STATUS_DISPLAY[task.status] ?? { label: task.status, color: 'bg-slate-100 text-slate-600' };
                       return (
@@ -532,6 +570,9 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm font-medium text-slate-800 leading-tight">{task.title}</span>
+                                <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                                  {displayTaskCode}
+                                </span>
                                 <span className={`text-xs px-1.5 py-0.5 rounded whitespace-nowrap ${ts.color}`}>{ts.label}</span>
                                 <span className={`text-xs px-1.5 py-0.5 rounded border whitespace-nowrap ${PRIORITY_COLORS[task.priority] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                                   {task.priority}
@@ -545,12 +586,20 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                                   <Clock className="h-3 w-3" />{task.estimatedDurationDays}d
                                 </span>
                                 {(task.assigneeName || task.assigneeId) ? (
-                                  <span className="text-xs text-slate-500 flex items-center gap-1">
-                                    <User className="h-3 w-3 shrink-0" />
-                                    <span className="truncate max-w-[120px]">
-                                      {task.assigneeName ?? (technicians.find((t) => t._id === task.assigneeId)?.name ?? 'Assigned')}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-slate-500 flex items-center gap-1">
+                                      <User className="h-3 w-3 shrink-0" />
+                                      <span className="truncate max-w-[120px]">
+                                        {task.assigneeName ?? (technicians.find((t) => t._id === task.assigneeId)?.name ?? 'Assigned')}
+                                      </span>
                                     </span>
-                                  </span>
+                                    <button
+                                      className="text-xs text-rose-600 hover:underline whitespace-nowrap"
+                                      onClick={() => handleUnassignTask(complaint._id, task._id)}
+                                    >
+                                      Unassign
+                                    </button>
+                                  </div>
                                 ) : (
                                   <button
                                     className="text-xs text-[#1e3a5f] underline hover:no-underline whitespace-nowrap"
@@ -616,7 +665,7 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
       <DefineScopeModal open={activeModal === 'scope'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleDefineScope} />
       <CreateTaskModal open={activeModal === 'createTask'} complaint={complaint} technicians={technicians} onClose={() => setActiveModal(null)} onSubmit={handleCreateTask} />
       <AssignTaskModal open={activeModal === 'assignTask'} task={selectedTask} complaint={complaint} technicians={technicians}
-        onClose={() => { setActiveModal(null); setSelectedTask(null); }} onSubmit={handleAssignTask} />
+        onClose={() => { setActiveModal(null); setSelectedTask(null); }} onSubmit={handleAssignTask} onUnassign={handleUnassignTask} />
       <RequestReworkModal open={activeModal === 'rework'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleRework} />
       <EscalateModal open={activeModal === 'escalate'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleEscalate} />
       <CloseComplaintModal open={activeModal === 'close'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleClose} />

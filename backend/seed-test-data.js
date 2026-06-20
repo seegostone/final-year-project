@@ -29,7 +29,7 @@ async function seedTestData() {
         role: 'Resident Staff',
         normalizedRole: 'resident_staff',
         phoneNumber: '0701234567',
-        isEmailVerified: true,
+        emailVerified: true,
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -42,7 +42,7 @@ async function seedTestData() {
         { _id: resident._id },
         { 
           $set: { 
-            isEmailVerified: true,
+            emailVerified: true,
             isActive: true,
             updatedAt: new Date()
           } 

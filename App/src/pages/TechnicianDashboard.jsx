@@ -7,6 +7,7 @@ import { StatCard } from '../components/StatCard';
 import { TaskCard } from '../components/TaskCard';
 import { EmptyState } from '../components/EmptyState';
 import technicianService from '../services/technicianApi';
+import { onTaskUnassigned } from '../utils/eventBus';
 
 export function TechnicianDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -16,24 +17,36 @@ export function TechnicianDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch tasks on component mount
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
+  const fetchTasks = async (showLoading = true) => {
+    try {
+      if (showLoading) {
         setLoading(true);
-        setError(null);
-        const tasksData = await technicianService.getTechnicianTasks();
-        setTasks(tasksData);
-      } catch (err) {
-        console.error('Error loading tasks:', err);
-        setError(err.message || 'Failed to load tasks');
+      }
+      setError(null);
+      const tasksData = await technicianService.getTechnicianTasks();
+      setTasks(tasksData);
+    } catch (err) {
+      console.error('Error loading tasks:', err);
+      setError(err.message || 'Failed to load tasks');
+      if (showLoading) {
         toast.error('Failed to load tasks');
-      } finally {
+      }
+    } finally {
+      if (showLoading) {
         setLoading(false);
       }
-    };
+    }
+  };
 
+  // Fetch tasks on component mount and refresh after task unassign events
+  useEffect(() => {
     fetchTasks();
+
+    const unsubscribe = onTaskUnassigned(() => {
+      fetchTasks(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const filteredTasks = tasks.filter(task => {

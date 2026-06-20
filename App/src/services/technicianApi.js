@@ -12,10 +12,22 @@ const technicianService = {
       
       if (response.success) {
         // Convert backend status to frontend display status
-        return response.data.map(task => ({
-          ...task,
-          displayStatus: this.mapStatusToDisplay(task.status),
-        }));
+        return response.data.map(task => {
+          // Ensure taskCode is always present
+          let taskCode = task.taskCode;
+          if (!taskCode && task.taskNumber && task.complaintLabel) {
+            taskCode = `${task.complaintLabel}-TASK-${String(task.taskNumber).padStart(3, '0')}`;
+          }
+          if (!taskCode) {
+            taskCode = task.taskId || task.id;
+          }
+          
+          return {
+            ...task,
+            taskCode,
+            displayStatus: this.mapStatusToDisplay(task.status),
+          };
+        });
       }
       throw new Error(response.message || 'Failed to fetch tasks');
     } catch (error) {
@@ -37,6 +49,7 @@ const technicianService = {
           displayStatus: this.mapStatusToDisplay(response.data.status),
           dueDate: response.data.dueDate || response.data.deadline,
           complaintLabel: response.data.complaintLabel || response.data.complaintId,
+          taskCode: response.data.taskCode || response.data.id,
         };
       }
       throw new Error(response.message || 'Failed to fetch task details');

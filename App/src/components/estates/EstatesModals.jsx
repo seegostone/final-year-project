@@ -12,6 +12,20 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
+function formatTechnicianDisplay(technician) {
+  const spec = technician.specialization || technician.trade || 'N/A';
+  const zone = technician.zone || 'N/A';
+  const skills = Array.isArray(technician.skills)
+    ? technician.skills.join(', ')
+    : (technician.skills || 'N/A');
+
+  return {
+    label: technician.name,
+    detail: `🔧 ${spec} • 📍 ${zone}`,
+    skills: `Skills: ${skills}`,
+  };
+}
+
 function remainingDays(complaint) {
   const total = complaint.scopeDefinition?.estimatedDuration ?? 0;
   const used = (complaint.tasks ?? []).reduce((s, t) => s + (t.estimatedDurationDays ?? 0), 0);
@@ -246,9 +260,19 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
                 <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {technicians.map((t) => (
-                    <SelectItem key={t._id} value={t._id}>{t.name} — {t.trade}</SelectItem>
-                  ))}
+                  {technicians.map((t) => {
+                    const tech = formatTechnicianDisplay(t);
+                    return (
+                      <SelectItem
+                        key={t._id}
+                        value={t._id}
+                        detail={`${tech.detail} · ${tech.skills}`}
+                        textValue={tech.label}
+                      >
+                        {tech.label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -281,7 +305,7 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
 
 // ─── Assign Task Modal ────────────────────────────────────────────────────────
 
-export function AssignTaskModal({ open, task, complaint, technicians, onClose, onSubmit }) {
+export function AssignTaskModal({ open, task, complaint, technicians, onClose, onSubmit, onUnassign }) {
   const [technicianId, setTechnicianId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -325,20 +349,35 @@ export function AssignTaskModal({ open, task, complaint, technicians, onClose, o
             <Select value={technicianId} onValueChange={setTechnicianId}>
               <SelectTrigger><SelectValue placeholder="Choose a technician..." /></SelectTrigger>
               <SelectContent>
-                {technicians.map((t) => (
-                  <SelectItem key={t._id} value={t._id}>
-                    {t.name} — {t.trade} ({t.zone})
-                  </SelectItem>
-                ))}
+                {technicians.map((t) => {
+                  const tech = formatTechnicianDisplay(t);
+                  return (
+                    <SelectItem
+                      key={t._id}
+                      value={t._id}
+                      detail={`${tech.detail} · ${tech.skills}`}
+                      textValue={tech.label}
+                    >
+                      {tech.label}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">Cancel</Button>
-          <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
-            {loading ? 'Assigning...' : 'Assign Technician'}
-          </Button>
+          { (task.assigneeId || task.assigneeName) ? (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => { if (onUnassign) { onUnassign(complaint._id, task._id); onClose(); } }} disabled={loading} className="text-rose-600">Unassign</Button>
+              <Button disabled className="bg-blue-600 text-white">Already assigned</Button>
+            </div>
+          ) : (
+            <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {loading ? 'Assigning...' : 'Assign Technician'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

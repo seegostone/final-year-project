@@ -60,18 +60,20 @@ export const registerValidation = [
     .withMessage('Invalid role selected'),
 
   body('specialization')
-    .if(body('role').equals('Technician'))
-    .notEmpty()
-    .withMessage('Specialization is required for technicians')
-    .isString()
-    .withMessage('Specialization must be a valid string'),
+    .custom((value, { req }) => {
+      if (req.body.role === 'Technician' && (!value || value.trim() === '')) {
+        throw new Error('Specialization is required for technicians');
+      }
+      return true;
+    }),
 
   body('zone')
-    .if(body('role').equals('Technician'))
-    .notEmpty()
-    .withMessage('Zone is required for technicians')
-    .isString()
-    .withMessage('Zone must be a valid string'),
+    .custom((value, { req }) => {
+      if (req.body.role === 'Technician' && (!value || value.trim() === '')) {
+        throw new Error('Zone is required for technicians');
+      }
+      return true;
+    }),
 
   body('skills')
     .optional()

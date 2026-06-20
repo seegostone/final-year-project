@@ -57,11 +57,11 @@ router.get(
           { $match: query },
           {
             $project: {
-              complaintId: '$complaintId',
+              complaintId: '$_id',
               complaintTitle: '$title',
               complaintDescription: '$description',
               complaintCategory: '$category',
-              complaintLocation: '$location || $scopeDefinition.location',
+              complaintLocation: '$location',
               tasks: {
                 $filter: {
                   input: '$tasks',
@@ -78,6 +78,8 @@ router.get(
               complaintId: 1,
               complaintLabel: '$complaintId',
               taskId: '$tasks._id',
+              taskCode: '$tasks.taskCode',
+              taskNumber: '$tasks.taskNumber',
               title: '$tasks.title',
               description: '$tasks.description',
               status: '$tasks.status',
@@ -104,8 +106,10 @@ router.get(
       const tasks = results.map((doc) => ({
         id: doc._id.toString(),
         taskId: doc.taskId.toString(),
+        taskNumber: doc.taskNumber,
         complaintId: doc.complaintId.toString(),
         complaintLabel: doc.complaintLabel || doc.complaintId.toString(),
+        taskCode: doc.taskCode || doc.taskId.toString(),
         title: doc.title,
         description: doc.description,
         status: doc.status, // 'open', 'in_progress', 'done', 'blocked'
@@ -172,8 +176,9 @@ router.get(
         });
       }
 
+      // Find the task assigned to this technician
       const task = (complaint.tasks || []).find(
-        (t) => t._id.toString() === taskId && t.assigneeId.toString() === technicianId.toString()
+        (t) => t._id.toString() === taskId && String(t.assigneeId) === String(technicianId)
       );
 
       if (!task) {
@@ -183,12 +188,31 @@ router.get(
         });
       }
 
+      // If the task does not have a stored taskNumber (older data), compute a fallback
+      // by ordering the complaint's tasks by creation time and using the index.
+      let effectiveTaskNumber = task.taskNumber;
+      try {
+        if (typeof effectiveTaskNumber !== 'number') {
+          const tasksSorted = (complaint.tasks || [])
+            .slice()
+            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+          const idx = tasksSorted.findIndex((t) => t._id.toString() === taskId);
+          if (idx >= 0) effectiveTaskNumber = idx + 1;
+        }
+      } catch (e) {
+        // ignore sorting errors and leave effectiveTaskNumber undefined
+      }
+
+      const effectiveTaskCode = task.taskCode || `${complaint.complaintId || complaint.complaintNumber || complaintId}-TASK-${String(effectiveTaskNumber || task._id.toString()).padStart ? String(effectiveTaskNumber).padStart(3,'0') : task._id.toString()}`;
+
       res.status(200).json({
         success: true,
         data: {
           id: task._id.toString(),
           complaintId: complaintId,
           complaintLabel: complaint.complaintId || complaint.complaintNumber || complaintId,
+          taskCode: effectiveTaskCode,
+          taskNumber: effectiveTaskNumber,
           title: task.title,
           description: task.description,
           status: task.status,
@@ -280,7 +304,7 @@ router.patch(
       }
 
       // Verify task is assigned to technician
-      if (task.assigneeId.toString() !== technicianId.toString()) {
+      if (String(task.assigneeId) !== String(technicianId)) {
         return res.status(403).json({
           success: false,
           message: 'Task not assigned to you',
