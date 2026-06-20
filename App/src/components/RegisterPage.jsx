@@ -32,6 +32,9 @@ export default function RegisterPage() {
       email: '',
       role: '',
       phoneNumber: '',
+      specialization: '',
+      zone: '',
+      skills: '',
       password: '',
       confirmPassword: '',
     },
@@ -58,7 +61,11 @@ export default function RegisterPage() {
     setIsSubmitting(true);
 
     try {
-      const result = await authService.register(values);
+      const payload = {
+      ...values,
+      skills: values.skills,
+    };
+    const result = await authService.register(payload);
 
       if (result.success) {
         setRegisteredEmail(values.email);
@@ -203,6 +210,77 @@ export default function RegisterPage() {
                 </p>
               )}
             </div>
+
+            {values.role === 'Technician' && (
+              <>
+                <div className="mb-6">
+                  <label htmlFor="registerSpecialization" className="block text-sm text-[#1F2937] mb-2">Specialization</label>
+                  <input
+                    id="registerSpecialization"
+                    name="specialization"
+                    type="text"
+                    value={values.specialization}
+                    onChange={(e) => handleInputChange('specialization', e.target.value)}
+                    placeholder="e.g. Plumbing, Electrical"
+                    className={`w-full px-4 py-3 border bg-white text-[#1F2937] ${
+                      errors.specialization ? 'border-[#FF5733]' : 'border-[rgba(0,0,0,0.1)]'
+                    } focus:outline-none focus:border-[#7B1A1A]`}
+                    style={{ borderRadius: '0px' }}
+                    autoComplete="off"
+                  />
+                  {errors.specialization && (
+                    <p className="text-xs text-[#FF5733] mt-1 m-0" style={{ fontFamily: 'monospace' }}>
+                      {errors.specialization}
+                    </p>
+                  )}
+                </div>
+                <div className="mb-6">
+                  <label htmlFor="registerZone" className="block text-sm text-[#1F2937] mb-2">Zone</label>
+                  <input
+                    id="registerZone"
+                    name="zone"
+                    type="text"
+                    value={values.zone}
+                    onChange={(e) => handleInputChange('zone', e.target.value)}
+                    placeholder="e.g. North Campus"
+                    className={`w-full px-4 py-3 border bg-white text-[#1F2937] ${
+                      errors.zone ? 'border-[#FF5733]' : 'border-[rgba(0,0,0,0.1)]'
+                    } focus:outline-none focus:border-[#7B1A1A]`}
+                    style={{ borderRadius: '0px' }}
+                    autoComplete="off"
+                  />
+                  {errors.zone && (
+                    <p className="text-xs text-[#FF5733] mt-1 m-0" style={{ fontFamily: 'monospace' }}>
+                      {errors.zone}
+                    </p>
+                  )}
+                </div>
+                <div className="mb-6">
+                  <label htmlFor="registerSkills" className="block text-sm text-[#1F2937] mb-2">Skills</label>
+                  <input
+                    id="registerSkills"
+                    name="skills"
+                    type="text"
+                    value={values.skills}
+                    onChange={(e) => handleInputChange('skills', e.target.value)}
+                    placeholder="e.g. plumbing, pipe fitting"
+                    className={`w-full px-4 py-3 border bg-white text-[#1F2937] ${
+                      errors.skills ? 'border-[#FF5733]' : 'border-[rgba(0,0,0,0.1)]'
+                    } focus:outline-none focus:border-[#7B1A1A]`}
+                    style={{ borderRadius: '0px' }}
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-[#6B7280] mt-1 m-0" style={{ fontFamily: 'monospace' }}>
+                    Separate skills with commas.
+                  </p>
+                  {errors.skills && (
+                    <p className="text-xs text-[#FF5733] mt-1 m-0" style={{ fontFamily: 'monospace' }}>
+                      {errors.skills}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
 
             <div className="mb-6">
               <label htmlFor="registerPhoneNumber" className="block text-sm text-[#1F2937] mb-2">Phone Number</label>

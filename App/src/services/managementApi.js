@@ -67,9 +67,13 @@ const managementService = {
   },
 
   // Get list of technicians
-  async getTechnicians() {
+  async getTechnicians(category = null) {
     try {
-      const response = await axiosInstance.get('/management/technicians');
+      const queryString = new URLSearchParams();
+      if (category) queryString.append('category', category);
+      const response = await axiosInstance.get(
+        `/management/technicians${queryString.toString() ? `?${queryString.toString()}` : ''}`
+      );
 
       return {
         success: true,
@@ -174,32 +178,6 @@ const managementService = {
       };
     } catch (error) {
       console.error('Define scope error:', error);
-      const formattedError = handleApiError(error);
-      return {
-        success: false,
-        error: formattedError.message,
-        type: formattedError.type,
-        status: error.status || 500,
-        validationErrors: formattedError.validationErrors,
-      };
-    }
-  },
-
-  // Assign complaint to technician
-  async assignComplaint(complaintId, data) {
-    try {
-      const response = await axiosInstance.post(
-        `/management/${complaintId}/assign`,
-        data
-      );
-
-      return {
-        success: true,
-        data: response.data || response,
-        message: response.message,
-      };
-    } catch (error) {
-      console.error('Assign complaint error:', error);
       const formattedError = handleApiError(error);
       return {
         success: false,

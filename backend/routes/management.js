@@ -4,7 +4,6 @@ import {
   validateComplaint,
   triageComplaint,
   defineScopeComplaint,
-  assignComplaint,
   createTask,
   assignTask,
   getManagementQueue,
@@ -81,20 +80,6 @@ const defineScopeValidation = [
     .withMessage('Estimated cost must be a positive number'),
 ];
 
-const assignComplaintValidation = [
-  param('id').isMongoId().withMessage('Invalid complaint ID'),
-  body('technicianId')
-    .notEmpty()
-    .withMessage('Technician ID is required')
-    .isMongoId()
-    .withMessage('Invalid technician ID'),
-  body('technicianName')
-    .notEmpty()
-    .withMessage('Technician name is required')
-    .isString()
-    .isLength({ min: 2, max: 100 })
-    .withMessage('Technician name must be between 2 and 100 characters'),
-];
 
 const qualityCheckValidation = [
   param('id').isMongoId().withMessage('Invalid complaint ID'),
@@ -246,8 +231,6 @@ router.post('/:id/triage', triageComplaintValidation, triageComplaint);
 
 router.post('/:id/scope', defineScopeValidation, defineScopeComplaint);
 
-// Assignment endpoint
-router.post('/:id/assign', assignComplaintValidation, assignComplaint);
 // Task endpoints
 router.post('/:id/tasks', createTaskValidation, createTask);
 router.post('/:id/tasks/:taskId/assign', assignTaskValidation, assignTask);

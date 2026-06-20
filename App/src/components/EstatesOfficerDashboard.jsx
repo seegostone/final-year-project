@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, BarChart3, Layers } from 'lucide-react';
-import { Card } from './ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Card } from './ui/card.jsx';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs.jsx';
 import { ComplaintDetailDrawer } from './estates/ComplaintDetailDrawer';
 import Header from './Header';
 import StatsRow from './StatsRow';
@@ -141,22 +141,9 @@ export default function EstatesOfficerDashboard() {
     }
   }, [statusFilter, priorityFilter, categoryFilter, search]);
 
-  // ── fetch stats + technicians (once on mount) ──────────────────────────────
-
-  useEffect(() => {
-    (async () => {
-      const [statsRes, techRes] = await Promise.all([
-        managementService.getDashboardStats(),
-        managementService.getTechnicians(),
-      ]);
-
-      if (statsRes.success && statsRes.data) {
-        setStats(statsRes.data);
-      } else {
-        setStats({});
-      }
-
-      // Normalize technician records from backend so UI fields match
+  const fetchTechnicians = useCallback(async (category = null) => {
+    try {
+      const techRes = await managementService.getTechnicians(category);
       const normalizeTech = (t) => ({
         _id: t._id || t.id || null,
         name: t.name || t.fullName || t.user?.name || '',
@@ -164,7 +151,6 @@ export default function EstatesOfficerDashboard() {
         phone: t.phone || t.phoneNumber || '',
         role: t.role || '',
         specialization: t.specialization || t.trade || '',
-        // Some parts of the UI expect `trade`/`zone` (mock data); keep them in sync
         trade: t.trade || t.specialization || '',
         zone: t.zone || '',
         avatar: t.avatar || null,
@@ -178,8 +164,27 @@ export default function EstatesOfficerDashboard() {
       } else {
         setTechnicians([]);
       }
-    })();
+    } catch (error) {
+      console.error('Failed to load technicians:', error);
+      setTechnicians([]);
+    }
   }, []);
+
+  // ── fetch stats + technicians (once on mount and when category changes) ──────────
+
+  useEffect(() => {
+    (async () => {
+      const statsRes = await managementService.getDashboardStats();
+
+      if (statsRes.success && statsRes.data) {
+        setStats(statsRes.data);
+      } else {
+        setStats({});
+      }
+
+      await fetchTechnicians(categoryFilter !== 'all' ? categoryFilter : null);
+    })();
+  }, [categoryFilter, fetchTechnicians]);
 
   // ── re-fetch on filter/page change with search debounce ───────────────────
 

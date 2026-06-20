@@ -58,6 +58,15 @@ export const validateRegistrationForm = (values) => {
     errors.role = 'Please select a role';
   }
 
+  if (values.role === 'Technician') {
+    if (!values.specialization?.trim()) {
+      errors.specialization = 'Specialization is required for technicians';
+    }
+    if (!values.zone?.trim()) {
+      errors.zone = 'Zone is required for technicians';
+    }
+  }
+
   if (!values.phoneNumber) {
     errors.phoneNumber = 'Phone number is required';
   } else if (!/^07\d{8}$/.test(values.phoneNumber.replace(/\s/g, ''))) {

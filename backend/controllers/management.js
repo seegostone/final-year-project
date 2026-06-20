@@ -1,5 +1,5 @@
 import { validationResult } from 'express-validator';
-import { managementOperations } from '../utils/database.js';
+import { managementOperations, userOperations } from '../utils/database.js';
 import { ObjectId } from 'mongodb';
 
 // @desc    Validate incoming complaint (initial analysis)
@@ -227,78 +227,6 @@ export const defineScopeComplaint = async (req, res) => {
   }
 };
 
-// @desc    Assign complaint to technician
-// @route   POST /api/management/:id/assign
-// @access  Private (Admin, Estates Officer)
-export const assignComplaint = async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: errors.array(),
-    });
-  }
-
-  try {
-    const db = req.app.locals.db;
-    const userId = req.user._id;
-    const userRole = req.user.normalizedRole || req.user.role;
-    const complaintId = req.params.id;
-    const { technicianId, technicianName } = req.body;
-
-    console.log('🔵 [ASSIGN COMPLAINT]', complaintId, 'to', technicianName);
-
-    // Check permission
-    const allowedRoles = ['admin', 'estates_officer'];
-    if (!allowedRoles.includes(userRole)) {
-      return res.status(403).json({
-        success: false,
-        message: 'You do not have permission to assign complaints',
-      });
-    }
-
-    // Validate MongoDB ObjectId (from URL parameter)
-    if (!ObjectId.isValid(complaintId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid complaint ID',
-      });
-    }
-
-    const complaint = await managementOperations.assignComplaint(
-      db,
-      complaintId,
-      {
-        technicianId,
-        technicianName,
-        assignedBy: userId,
-      }
-    );
-
-    if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: 'Complaint not found or cannot be assigned',
-      });
-    }
-
-    console.log('✅ [ASSIGN COMPLAINT] Assigned:', complaintId);
-
-    res.status(200).json({
-      success: true,
-      message: 'Complaint assigned successfully',
-      data: complaint,
-    });
-  } catch (error) {
-    console.error('Assign complaint error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while assigning complaint',
-    });
-  }
-};
-
 
 
 
@@ -418,6 +346,19 @@ export const updateTaskStatus = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
       }
 
+      const isEligible = await userOperations.isTechnicianEligible(
+        db,
+        technicianId,
+        complaint?.category || null
+      );
+
+      if (!isEligible) {
+        return res.status(400).json({
+          success: false,
+          message: 'Selected technician is not eligible for this complaint category or has too many active tasks',
+        });
+      }
+
       const updated = await managementOperations.assignTaskToComplaint(db, complaintId, taskId, { technicianId, technicianName }, userId);
 
       if (!updated) {
@@ -430,6 +371,39 @@ export const updateTaskStatus = async (req, res) => {
       res.status(500).json({ success: false, message: 'Server error while assigning task' });
     }
   };
+
+    // @desc    Unassign a technician from a specific task
+    // @route   POST /api/management/:id/tasks/:taskId/unassign
+    // @access  Private (Admin, Estates Officer)
+    export const unassignTask = async (req, res) => {
+      try {
+        const db = req.app.locals.db;
+        const userId = req.user._id;
+        const userRole = req.user.normalizedRole || req.user.role;
+        const complaintId = req.params.id;
+        const taskId = req.params.taskId;
+
+        const allowedRoles = ['admin', 'estates_officer'];
+        if (!allowedRoles.includes(userRole)) {
+          return res.status(403).json({ success: false, message: 'You do not have permission to unassign tasks' });
+        }
+
+        if (!ObjectId.isValid(complaintId) || !ObjectId.isValid(taskId)) {
+          return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
+        }
+
+        const updated = await managementOperations.unassignTaskFromComplaint(db, complaintId, taskId, userId);
+
+        if (!updated) {
+          return res.status(404).json({ success: false, message: 'Task or complaint not found or cannot be unassigned' });
+        }
+
+        res.status(200).json({ success: true, message: 'Task unassigned', data: updated });
+      } catch (error) {
+        console.error('Unassign task error:', error);
+        res.status(500).json({ success: false, message: 'Server error while unassigning task' });
+      }
+    };
 
 // @desc    Get complaint management queue
 // @route   GET /api/management/queue
@@ -1005,28 +979,59 @@ export const getTechnicians = async (req, res) => {
   try {
     const db = req.app.locals.db;
     const usersCollection = db.collection('users');
+    const category = req.query.category || null;
+    const maxActiveTasks = 2;
 
-    console.log('🔵 [GET TECHNICIANS]');
+    console.log('🔵 [GET TECHNICIANS]', 'Category:', category);
+
+    const query = {
+      role: 'technician',
+      isActive: true,
+    };
 
     const technicians = await usersCollection
-      .find({ role: 'technician', isActive: true })
+      .find(query)
       .project({
         _id: 1,
         name: 1,
         email: 1,
+        phoneNumber: 1,
         phone: 1,
         role: 1,
         specialization: 1,
+        trade: 1,
+        zone: 1,
+        skills: 1,
         avatar: 1,
       })
       .toArray();
 
-    console.log('✅ [GET TECHNICIANS] Found:', technicians.length);
+    const eligibleTechnicians = [];
+
+    for (const technician of technicians) {
+      const isEligible = await userOperations.isTechnicianEligible(
+        db,
+        technician._id,
+        category,
+        maxActiveTasks
+      );
+
+      if (isEligible) {
+        eligibleTechnicians.push({
+          ...technician,
+          specialization: technician.specialization || technician.trade || '',
+          trade: technician.trade || technician.specialization || '',
+          skills: technician.skills || [],
+        });
+      }
+    }
+
+    console.log('✅ [GET TECHNICIANS] Eligible:', eligibleTechnicians.length);
 
     res.status(200).json({
       success: true,
-      count: technicians.length,
-      data: technicians,
+      count: eligibleTechnicians.length,
+      data: eligibleTechnicians,
     });
   } catch (error) {
     console.error('Get technicians error:', error);

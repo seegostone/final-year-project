@@ -113,6 +113,7 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import complaintRoutes from './routes/complaints.js';
 import managementRoutes from './routes/management.js';
+import technicianRoutes from './routes/technician.js';
 
 // Routes
 const attachDb = (req, res, next) => {
@@ -129,6 +130,7 @@ app.use('/api/auth', attachDb, authRoutes);
 app.use('/api/users', attachDb, userRoutes);
 app.use('/api/complaints', attachDb, complaintRoutes);
 app.use('/api/management', attachDb, managementRoutes);
+app.use('/api/technician', attachDb, technicianRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

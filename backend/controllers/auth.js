@@ -32,8 +32,14 @@ export const register = async (req, res) => {
     });
   }
 
-  const { name, email, password, role, phoneNumber } = req.body;
+  const { name, email, password, role, phoneNumber, specialization, zone, skills } = req.body;
   const db = req.app.locals.db;
+
+  const normalizedSkills = Array.isArray(skills)
+    ? skills.map((skill) => skill.trim()).filter(Boolean)
+    : typeof skills === 'string'
+    ? skills.split(',').map((skill) => skill.trim()).filter(Boolean)
+    : [];
 
   try {
     // Check if user already exists
@@ -56,6 +62,9 @@ export const register = async (req, res) => {
       password: hashedPassword,
       role: role || 'user',
       phoneNumber,
+      specialization,
+      zone,
+      skills: normalizedSkills,
       isActive: true,
       emailVerified: false,
     });

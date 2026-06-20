@@ -1,6 +1,6 @@
 import React from 'react';
 import { Layers, RefreshCw, Clock, FileWarning, CheckCircle2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card.jsx';
 
 function StatsRow({ stats = {} }) {
   return (

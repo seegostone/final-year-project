@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card.jsx';
 
 export default function AnalyticsTab({ stats, complaints }) {
   const byCategory = (complaints ?? []).reduce((acc, c) => {

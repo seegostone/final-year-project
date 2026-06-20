@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from './ui/button';
+import { Button } from './ui/button.jsx';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 function PaginationControls({ page, setPage, totalPages, totalComplaints, loading }) {

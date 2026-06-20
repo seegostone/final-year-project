@@ -59,6 +59,25 @@ export const registerValidation = [
     .isIn(['Custodian', 'Resident Staff', 'Warden', 'Technician', 'Admin'])
     .withMessage('Invalid role selected'),
 
+  body('specialization')
+    .if(body('role').equals('Technician'))
+    .notEmpty()
+    .withMessage('Specialization is required for technicians')
+    .isString()
+    .withMessage('Specialization must be a valid string'),
+
+  body('zone')
+    .if(body('role').equals('Technician'))
+    .notEmpty()
+    .withMessage('Zone is required for technicians')
+    .isString()
+    .withMessage('Zone must be a valid string'),
+
+  body('skills')
+    .optional()
+    .isString()
+    .withMessage('Skills must be a comma-separated string'),
+
   body('phoneNumber')
     .optional()
     .matches(/^07\d{8}$/)

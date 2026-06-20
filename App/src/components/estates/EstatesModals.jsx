@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '../ui/dialog';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { Textarea } from '../ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Alert, AlertDescription } from '../ui/alert';
+} from '../ui/dialog.jsx';
+import { Button } from '../ui/button.jsx';
+import { Input } from '../ui/input.jsx';
+import { Label } from '../ui/label.jsx';
+import { Textarea } from '../ui/textarea.jsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select.jsx';
+import { Alert, AlertDescription } from '../ui/alert.jsx';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-[#1e3a5f]">Create Task — {complaint.complaintId}</DialogTitle>
         </DialogHeader>
@@ -187,11 +187,22 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
           )}
           <div className="space-y-1.5">
             <Label>Task Title <span className="text-rose-500">*</span></Label>
-            <Input placeholder="e.g. Replace burst pipe section" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <Input
+              placeholder="e.g. Replace burst pipe section"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Description</Label>
-            <Textarea placeholder="Detailed task description..." rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+            <Textarea
+              placeholder="Detailed task description..."
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -208,9 +219,13 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
             <div className="space-y-1.5">
               <Label>Duration (days) <span className="text-rose-500">*</span></Label>
               <Input
-                type="number" min="0.25" step="0.25" placeholder="e.g. 1.5"
-                value={durationDays} onChange={(e) => setDurationDays(e.target.value)}
-                className={exceedsScope ? 'border-rose-400' : ''}
+                type="number"
+                min="0.25"
+                step="0.25"
+                placeholder="e.g. 1.5"
+                value={durationDays}
+                onChange={(e) => setDurationDays(e.target.value)}
+                className={`${exceedsScope ? 'border-rose-400' : 'border-slate-200'} w-full rounded-lg bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100`}
               />
               {exceedsScope && <p className="text-xs text-rose-600">Exceeds remaining scope!</p>}
             </div>
@@ -218,7 +233,12 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Start Date</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Assign to Technician</Label>
@@ -235,12 +255,22 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
           </div>
           <div className="space-y-1.5">
             <Label>Notes</Label>
-            <Input placeholder="Any additional notes..." value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Input
+              placeholder="Any additional notes..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+            />
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">Cancel</Button>
-          <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="bg-[#7B1A1A] hover:bg-[#5A1313] text-white"
+            style={{ backgroundColor: '#7B1A1A', borderColor: '#5A1313' }}
+          >
             {loading ? 'Creating...' : 'Create Task'}
           </Button>
         </DialogFooter>
@@ -315,71 +345,7 @@ export function AssignTaskModal({ open, task, complaint, technicians, onClose, o
   );
 }
 
-// ─── Assign Complaint Modal ───────────────────────────────────────────────────
-
-export function AssignComplaintModal({ open, complaint, technicians, onClose, onSubmit }) {
-  const [technicianId, setTechnicianId] = useState('');
-  const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const handleSubmit = async () => {
-    if (!technicianId) { setError('Please select a technician.'); return; }
-    setLoading(true);
-    setError(null);
-    try {
-      const tech = technicians.find((t) => t._id === technicianId);
-      await onSubmit(complaint._id, { technicianId, technicianName: tech?.name ?? '', notes });
-      setTechnicianId(''); setNotes('');
-      onClose();
-    } catch {
-      setError('Failed to assign complaint. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-[#1e3a5f]">Assign Complaint — {complaint.complaintId}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          {error && (
-            <Alert className="border-rose-200 bg-rose-50">
-              <AlertTriangle className="h-4 w-4 text-rose-600" />
-              <AlertDescription className="text-rose-800 text-sm">{error}</AlertDescription>
-            </Alert>
-          )}
-          <div className="space-y-1.5">
-            <Label>Lead Technician <span className="text-rose-500">*</span></Label>
-            <Select value={technicianId} onValueChange={setTechnicianId}>
-              <SelectTrigger><SelectValue placeholder="Choose lead technician..." /></SelectTrigger>
-              <SelectContent>
-                {technicians.map((t) => (
-                  <SelectItem key={t._id} value={t._id}>
-                    {t.name} — {t.trade} ({t.zone})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Assignment Notes</Label>
-            <Textarea placeholder="Any instructions for the technician..." rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">Cancel</Button>
-          <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
-            {loading ? 'Assigning...' : 'Assign Complaint'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// ─── Assign Technician Modal ─────────────────────────────────────────────────
 
 // ─── Request Rework Modal ─────────────────────────────────────────────────────
 

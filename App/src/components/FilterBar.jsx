@@ -15,19 +15,19 @@ export default function FilterBar({
 }) {
   return (
     <div className="p-4 border-b border-slate-100">
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
           <Input
             placeholder="Search ID, title, location, submitter…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-8 text-sm bg-slate-50 border-slate-200"
+            className="w-full pl-9 h-10 text-sm bg-slate-50 border-slate-200"
           />
         </div>
-        <div className="flex gap-2 flex-wrap shrink-0">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-8 w-[150px] text-xs bg-slate-50 border-slate-200">
+            <SelectTrigger className="h-10 w-full sm:w-[150px] text-xs bg-slate-50 border-slate-200">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -38,7 +38,7 @@ export default function FilterBar({
           </Select>
 
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="h-8 w-[130px] text-xs bg-slate-50 border-slate-200">
+            <SelectTrigger className="h-10 w-full sm:w-[130px] text-xs bg-slate-50 border-slate-200">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -49,7 +49,7 @@ export default function FilterBar({
           </Select>
 
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-8 w-[130px] text-xs bg-slate-50 border-slate-200">
+            <SelectTrigger className="h-10 w-full sm:w-[130px] text-xs bg-slate-50 border-slate-200">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -61,10 +61,10 @@ export default function FilterBar({
 
           {(search || statusFilter !== 'all' || priorityFilter !== 'all' || categoryFilter !== 'all') && (
             <Button
-              variant="ghost" size="sm" className="h-8 px-2 text-xs text-slate-500 hover:text-slate-800"
+              variant="ghost" size="sm" className="h-10 px-3 text-xs text-slate-500 hover:text-slate-800"
               onClick={clearFilters}
             >
-              <XCircle className="h-3.5 w-3.5 mr-1" />Clear
+              <XCircle className="h-4 w-4 mr-1" />Clear
             </Button>
           )}
         </div>

@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Button } from '../ui/button';
-import { Progress } from '../ui/progress';
-import { Alert, AlertDescription } from '../ui/alert';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet.jsx';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs.jsx';
+import { Button } from '../ui/button.jsx';
+import { Progress } from '../ui/progress.jsx';
+import { Alert, AlertDescription } from '../ui/alert.jsx';
 import {
   AlertTriangle, CheckCircle2, Clock, User, MapPin, Tag, Calendar,
   Wrench, Plus, AlertCircle, ChevronRight, RotateCcw, TrendingUp,
@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import {
   DefineScopeModal, CreateTaskModal, AssignTaskModal,
-  AssignComplaintModal, RequestReworkModal, EscalateModal, CloseComplaintModal,
+  RequestReworkModal, EscalateModal, CloseComplaintModal,
 } from './EstatesModals';
 import managementService from '../../services/managementApi';
 import complaintService from '../../services/complaintsApi';
@@ -114,7 +114,6 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
   const scopePercent = scopeTotal > 0 ? Math.min(100, (scopeUsed / scopeTotal) * 100) : 0;
 
   const canDefineScope = ['pending', 'triaged', 'analyzed'].includes(complaint.status) && !complaint.scopeDefinition;
-  const canAssignComplaint = !!complaint.scopeDefinition && ['scope_defined', 'triaged'].includes(complaint.status);
   const canCreateTask = !!complaint.scopeDefinition && !['closed'].includes(complaint.status);
   const canRework = ['in-progress', 'assigned', 'scope_defined'].includes(complaint.status) && (complaint.reworkCount ?? 0) < 2;
   const canEscalate = !['closed', 'escalated'].includes(complaint.status);
@@ -212,22 +211,6 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
     );
   };
 
-  const handleAssignComplaint = async (_id, data) => {
-    await callApi(
-      () => managementService.assignComplaint(_id, data),
-      () => ({
-        ...complaint,
-        status: 'assigned',
-        assignment: {
-          technicianId: data.technicianId,
-          technicianName: data.technicianName,
-          assignedAt: new Date().toISOString(),
-          confirmed: false,
-        },
-      })
-    );
-  };
-
   const handleRework = async (_id, data) => {
     await callApi(
       () => managementService.requestRework(_id, data),
@@ -309,13 +292,6 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                   className="h-7 text-xs rounded-md border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100"
                   onClick={() => setActiveModal('scope')} disabled={actionLoading}>
                   <ClipboardList className="h-3 w-3 mr-1" />Define Scope
-                </Button>
-              )}
-              {canAssignComplaint && (
-                <Button size="sm" variant="outline"
-                  className="h-7 text-xs rounded-md border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100"
-                  onClick={() => setActiveModal('assignComplaint')} disabled={actionLoading}>
-                  <User className="h-3 w-3 mr-1" />Assign
                 </Button>
               )}
               {canCreateTask && (
@@ -568,10 +544,12 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                                 <span className="text-xs text-slate-500 flex items-center gap-1 whitespace-nowrap">
                                   <Clock className="h-3 w-3" />{task.estimatedDurationDays}d
                                 </span>
-                                {task.assigneeName ? (
+                                {(task.assigneeName || task.assigneeId) ? (
                                   <span className="text-xs text-slate-500 flex items-center gap-1">
                                     <User className="h-3 w-3 shrink-0" />
-                                    <span className="truncate max-w-[120px]">{task.assigneeName}</span>
+                                    <span className="truncate max-w-[120px]">
+                                      {task.assigneeName ?? (technicians.find((t) => t._id === task.assigneeId)?.name ?? 'Assigned')}
+                                    </span>
                                   </span>
                                 ) : (
                                   <button
@@ -639,7 +617,6 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
       <CreateTaskModal open={activeModal === 'createTask'} complaint={complaint} technicians={technicians} onClose={() => setActiveModal(null)} onSubmit={handleCreateTask} />
       <AssignTaskModal open={activeModal === 'assignTask'} task={selectedTask} complaint={complaint} technicians={technicians}
         onClose={() => { setActiveModal(null); setSelectedTask(null); }} onSubmit={handleAssignTask} />
-      <AssignComplaintModal open={activeModal === 'assignComplaint'} complaint={complaint} technicians={technicians} onClose={() => setActiveModal(null)} onSubmit={handleAssignComplaint} />
       <RequestReworkModal open={activeModal === 'rework'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleRework} />
       <EscalateModal open={activeModal === 'escalate'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleEscalate} />
       <CloseComplaintModal open={activeModal === 'close'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleClose} />

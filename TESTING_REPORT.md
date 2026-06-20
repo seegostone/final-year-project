@@ -42,7 +42,7 @@
 1. **ValidateModal** - Uses `managementService.validateComplaint()`
 2. **TriageModal** - Uses `managementService.triageComplaint()`
 3. **ScopeModal** - Uses `managementService.defineScopeComplaint()`
-4. **AssignModal** - Uses `managementService.assignComplaint()`
+4. **AssignModal** - Uses `managementService.assignTask()`
 5. **QualityCheckModal** - Uses `managementService.performQualityCheck()`
 6. **ScheduleInspectionModal** - Uses `managementService.scheduleInspection()`
 7. **ResidentApprovalModal** - Uses `managementService.recordResidentApproval()`
@@ -77,7 +77,7 @@ All frontend service methods match backend controller expectations:
 | `validateComplaint()` | POST /validate | validateComplaint | ✅ |
 | `triageComplaint()` | POST /triage | triageComplaint | ✅ |
 | `defineScopeComplaint()` | POST /scope | defineScopeComplaint | ✅ |
-| `assignComplaint()` | POST /assign | assignComplaint | ✅ |
+| `assignTask()` | POST /:id/tasks/:taskId/assign | assignTask | ✅ |
 | `confirmAssignment()` | POST /confirm | confirmAssignment | ✅ |
 | `performQualityCheck()` | POST /quality-check | performQualityCheck | ✅ |
 | `scheduleInspection()` | POST /schedule-inspection | scheduleInspection | ✅ |

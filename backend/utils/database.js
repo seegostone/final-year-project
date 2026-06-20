@@ -194,10 +194,19 @@ export const userOperations = {
       throw new Error('User already exists');
     }
 
+    const normalizedRole = normalizeRole(userData.role);
     const user = {
       ...userData,
       _id: new ObjectId(),
-      role: normalizeRole(userData.role) || 'user',
+      role: normalizedRole || 'user',
+      normalizedRole: normalizedRole || 'user',
+      specialization: userData.specialization || null,
+      zone: userData.zone || null,
+      skills: Array.isArray(userData.skills)
+        ? userData.skills
+        : userData.skills
+        ? [userData.skills]
+        : [],
       isActive: true,
       lastLogin: null,
       resetPasswordToken: null,
@@ -223,6 +232,53 @@ export const userOperations = {
   async findById(db, id) {
     const users = db.collection('users');
     return await users.findOne({ _id: new ObjectId(id) });
+  },
+
+  // Get active open/in-progress task count for a technician
+  async getTechnicianActiveTaskCount(db, technicianId) {
+    const complaints = db.collection('complaints');
+    const result = await complaints
+      .aggregate([
+        { $unwind: '$tasks' },
+        {
+          $match: {
+            'tasks.assigneeId': new ObjectId(technicianId),
+            'tasks.status': { $in: ['open', 'in_progress'] },
+          },
+        },
+        { $count: 'activeCount' },
+      ])
+      .toArray();
+
+    return result[0]?.activeCount || 0;
+  },
+
+  // Verify technician eligibility for complaint category and capacity
+  async isTechnicianEligible(db, technicianId, category, maxActiveTasks = 2) {
+    const user = await this.findById(db, technicianId);
+    if (!user || !user.isActive) return false;
+
+    const role = normalizeRole(user.role);
+    if (role !== 'technician') return false;
+
+    const activeTaskCount = await this.getTechnicianActiveTaskCount(db, technicianId);
+    if (activeTaskCount >= maxActiveTasks) return false;
+
+    if (!category) return true;
+
+    const normalize = (value) => String(value || '').trim().toLowerCase();
+    const categoryKey = normalize(category);
+    const specialization = normalize(user.specialization || user.trade);
+    const skills = Array.isArray(user.skills)
+      ? user.skills.map((skill) => normalize(skill))
+      : [];
+
+    if (specialization === categoryKey) return true;
+    if (normalize(user.trade) === categoryKey) return true;
+    if (skills.includes(categoryKey)) return true;
+    if (skills.some((skill) => skill.includes(categoryKey))) return true;
+
+    return false;
   },
 
   // Update user
@@ -1096,55 +1152,6 @@ export const managementOperations = {
     return await complaints.findOne({ _id: new ObjectId(complaintId) });
   },
 
-  // Assign complaint to technician (Phase 2)
-  async assignComplaint(db, complaintId, assignmentData) {
-    const complaints = db.collection('complaints');
-
-    // Query by MongoDB _id (ObjectId)
-    const complaint = await complaints.findOne({
-      _id: new ObjectId(complaintId),
-    });
-    if (!complaint) return null;
-
-    // Validate that complaint is ready for assignment
-    if (!['scope_defined', 'triaged'].includes(complaint.status)) {
-      return null;
-    }
-
-    const updateFields = {
-      status: 'assigned',
-      'assignment.technicianId': new ObjectId(assignmentData.technicianId),
-      'assignment.technicianName': assignmentData.technicianName,
-      'assignment.assignedBy': assignmentData.assignedBy,
-      'assignment.assignedAt': new Date(),
-      'assignment.confirmed': false,
-      updatedAt: new Date(),
-    };
-
-    const historyEntry = buildHistoryEntry({
-      action: 'assigned',
-      from: complaint.status,
-      to: 'assigned',
-      by: assignmentData.assignedBy,
-      byName: 'Estates Officer',
-      byRole: 'estates_officer',
-      note: `Assigned to: ${assignmentData.technicianName || 'Technician'}`,
-    });
-
-    const result = await complaints.updateOne(
-      { _id: new ObjectId(complaintId) },
-      {
-        $set: updateFields,
-        $push: { history: historyEntry },
-      }
-    );
-
-    if (result.modifiedCount === 0) return null;
-
-    return await complaints.findOne({ _id: new ObjectId(complaintId) });
-  },
-
-
   // Assign a technician to a specific task inside a complaint
   async assignTaskToComplaint(db, complaintId, taskId, assigneeData, assignedBy) {
     const complaints = db.collection('complaints');
@@ -1169,6 +1176,46 @@ export const managementOperations = {
             byName: 'Estates Officer',
             byRole: 'estates_officer',
             note: `Task ${taskId} assigned to ${assigneeData.technicianName}`,
+          }),
+        },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Unassign a technician from a specific task inside a complaint
+  async unassignTaskFromComplaint(db, complaintId, taskId, unassignedBy) {
+    const complaints = db.collection('complaints');
+    const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
+    if (!complaint) return null;
+
+    const task = (complaint.tasks || []).find((t) => t._id.toString() === new ObjectId(taskId).toString());
+    if (!task) return null;
+    if (!task.assigneeId) return null; // nothing to unassign
+
+    const previousAssigneeName = task.assigneeName || null;
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId), 'tasks._id': new ObjectId(taskId) },
+      {
+        $set: {
+          'tasks.$.assigneeId': null,
+          'tasks.$.assigneeName': null,
+          'tasks.$.assignedAt': null,
+          updatedAt: new Date(),
+        },
+        $push: {
+          history: buildHistoryEntry({
+            action: 'task_unassigned',
+            from: complaint.status,
+            to: complaint.status,
+            by: unassignedBy,
+            byName: 'Estates Officer',
+            byRole: 'estates_officer',
+            note: `Task ${taskId} unassigned${previousAssigneeName ? ` (was ${previousAssigneeName})` : ''}`,
           }),
         },
       }
