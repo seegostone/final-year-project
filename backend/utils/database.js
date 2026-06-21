@@ -985,7 +985,7 @@ export const managementOperations = {
       createdBy: new ObjectId(createdBy),
       createdAt: new Date(),
     };
-
+ console.log(`${task}- for debugging addTaskToComplaint function`);
     const historyEntry = buildHistoryEntry({
       action: 'task_created',
       from: complaint.status,
@@ -1005,6 +1005,7 @@ export const managementOperations = {
     );
 
     if (result.modifiedCount === 0) return null;
+    console.log(`Task ${task.taskCode} added to complaint ${complaint.complaintId}`);
     return task;
   },
 
