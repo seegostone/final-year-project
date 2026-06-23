@@ -32,9 +32,16 @@ export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
     setError('');
     setIsVerifying(true);
 
+    const trimmedToken = verificationToken.trim();
+    if (!trimmedToken) {
+      setError('Verification code cannot be empty.');
+      setIsVerifying(false);
+      return;
+    }
+
     try {
-      const result = await authService.verifyEmail(verificationToken);
-      console.log(verificationToken);
+      const result = await authService.verifyEmail(trimmedToken);
+      console.log(trimmedToken);
 
       if (result.success) {
         // Store token using the same key `authService` expects
