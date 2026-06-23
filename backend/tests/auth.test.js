@@ -31,7 +31,7 @@ describe('Authentication', () => {
     it('should register a new user', async () => {
       const userData = {
         name: 'Test User',
-        email: 'test@mak.ac.ug',
+        email: 'test@gmail.com',
         password: 'Password123!',
       };
 
@@ -71,7 +71,7 @@ describe('Authentication', () => {
 
       await db.collection('users').insertOne({
         name: 'Test User',
-        email: 'test@mak.ac.ug',
+        email: 'test@gmail.com',
         password: hashedPassword,
         role: 'user',
         isActive: true,
@@ -84,7 +84,7 @@ describe('Authentication', () => {
 
     it('should login user with correct credentials', async () => {
       const loginData = {
-        email: 'test@mak.ac.ug',
+        email: 'test@gmail.com',
         password: 'Password123!',
       };
 
@@ -100,7 +100,7 @@ describe('Authentication', () => {
 
     it('should not login with incorrect password', async () => {
       const loginData = {
-        email: 'test@mak.ac.ug',
+        email: 'test@gmail.com',
         password: 'wrongpassword',
       };
 

@@ -96,17 +96,17 @@ export default function EstatesOfficerDashboard() {
   const debounceRef = useRef(null);
   const mountedRef = useRef(false);
 
-  // ── fetch queue ────────────────────────────────────────────────────────────
+  // ── Fetch helper (stable across renders) ────────────────────────────────────────
 
-  const fetchQueue = useCallback(async (currentPage) => {
+  const fetchQueueData = useCallback(async (pageNum, filters) => {
     setLoading(true);
     try {
       const res = await managementService.getQueue({
-        status: statusFilter,
-        priority: priorityFilter,
-        category: categoryFilter !== 'all' ? categoryFilter : undefined,
-        search: search || undefined,
-        page: currentPage,
+        status: filters.statusFilter,
+        priority: filters.priorityFilter,
+        category: filters.categoryFilter !== 'all' ? filters.categoryFilter : undefined,
+        search: filters.search || undefined,
+        page: pageNum,
         limit: LIMIT,
       });
 
@@ -139,9 +139,9 @@ export default function EstatesOfficerDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, categoryFilter, search]);
+  }, []);
 
-  const fetchTechnicians = useCallback(async (category = null) => {
+  const fetchTechsData = useCallback(async (category = null) => {
     try {
       const techRes = await managementService.getTechnicians(category);
       const normalizeTech = (t) => ({
@@ -170,43 +170,60 @@ export default function EstatesOfficerDashboard() {
     }
   }, []);
 
-  // ── fetch stats + technicians (once on mount and when category changes) ──────────
+  // ── Initial load + stats/technicians ──────────────────────────────────────────
 
   useEffect(() => {
-    (async () => {
-      const statsRes = await managementService.getDashboardStats();
+    let isMounted = true;
 
-      if (statsRes.success && statsRes.data) {
-        setStats(statsRes.data);
-      } else {
-        setStats({});
+    const initLoad = async () => {
+      // Fetch stats
+      const statsRes = await managementService.getDashboardStats();
+      if (isMounted) {
+        setStats(statsRes.success && statsRes.data ? statsRes.data : {});
       }
 
-      await fetchTechnicians(categoryFilter !== 'all' ? categoryFilter : null);
-    })();
-  }, [categoryFilter, fetchTechnicians]);
+      // Fetch technicians
+      await fetchTechsData(categoryFilter !== 'all' ? categoryFilter : null);
 
-  // ── re-fetch on filter/page change with search debounce ───────────────────
+      // Fetch queue with current filters (page 1)
+      if (isMounted) {
+        await fetchQueueData(1, { statusFilter, priorityFilter, categoryFilter, search });
+      }
+    };
+
+    initLoad();
+    return () => { isMounted = false; };
+  }, []); // Only run once on mount
+
+  // ── Refetch technicians when category changes ──────────────────────────────────
 
   useEffect(() => {
-    if (!mountedRef.current) {
-      mountedRef.current = true;
-      return;
-    }
+    fetchTechsData(categoryFilter !== 'all' ? categoryFilter : null);
+  }, [categoryFilter, fetchTechsData]);
 
+  // ── Reset page to 1 and fetch when filters change (debounced) ────────────────────
+
+  useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    
     debounceRef.current = setTimeout(() => {
-      fetchQueue(1);
+      setPage(1);
+      // Fetch directly here with current filters to avoid race conditions
+      fetchQueueData(1, { statusFilter, priorityFilter, categoryFilter, search });
     }, 300);
+
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [search, statusFilter, priorityFilter, categoryFilter, fetchQueue]);
+  }, [search, statusFilter, priorityFilter, categoryFilter, fetchQueueData]);
+
+  // ── Fetch queue data only when page changes (no filter debounce for direct page nav) ────
 
   useEffect(() => {
-    const id = setTimeout(() => fetchQueue(page), 0);
-    return () => clearTimeout(id);
-  }, [page, fetchQueue]);
+    if (page === 1) return; // Skip: already handled by filter effect or initial load
+    
+    fetchQueueData(page, { statusFilter, priorityFilter, categoryFilter, search });
+  }, [page, fetchQueueData]);
 
   // ── handle complaint update from drawer ────────────────────────────────────
 
@@ -271,7 +288,6 @@ export default function EstatesOfficerDashboard() {
               STATUSES={STATUSES} PRIO_OPTIONS={PRIORITIES} CATEGORIES={CATEGORIES}
               clearFilters={clearFilters}
               queueError={queueError}
-              fetchQueue={fetchQueue}
               complaints={complaints} loading={loading} onRowClick={setSelected}
               page={page} setPage={setPage} totalPages={totalPages} totalComplaints={totalComplaints}
               STATUS_BADGE={STATUS_BADGE} statusLabel={statusLabel}

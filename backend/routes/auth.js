@@ -34,8 +34,8 @@ export const registerValidation = [
     .withMessage('Please provide a valid email address')
     .normalizeEmail()
     .custom((email) => {
-      if (!email.endsWith('@mak.ac.ug')) {
-        throw new Error('Email must be a valid @mak.ac.ug address');
+      if (!email.toLowerCase().endsWith('@gmail.com')) {
+        throw new Error('Email must be a valid @gmail.com address');
       }
       return true;
     }),
@@ -86,13 +86,21 @@ export const registerValidation = [
     .withMessage('Phone number must start with 07 and be 10 digits long'),
 ];
 
+const gmailDomain = '@gmail.com';
+
 export const loginValidation = [
   body('email')
     .trim()
     .notEmpty()
     .withMessage('Email is required')
     .isEmail()
-    .withMessage('Please provide a valid email'),
+    .withMessage('Please provide a valid email')
+    .custom((email) => {
+      if (!email.toLowerCase().endsWith(gmailDomain)) {
+        throw new Error('Email must be a valid @gmail.com address');
+      }
+      return true;
+    }),
   body('password').notEmpty().withMessage('Password is required'),
 ];
 

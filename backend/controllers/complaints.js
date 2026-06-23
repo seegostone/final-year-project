@@ -1,11 +1,12 @@
 import { validationResult } from 'express-validator';
-import { complaintOperations } from '../utils/database.js';
+import { complaintOperations, userOperations } from '../utils/database.js';
+import emailService from '../services/emailService.js';
 import { ObjectId } from 'mongodb';
 
 // @desc    Create a new complaint
 // @route   POST /api/complaints
 // @access  Private (Resident Staff, Warden, Custodian)
-export const createComplaint = async (req, res) => {
+export const createComplaint = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
@@ -77,6 +78,31 @@ export const createComplaint = async (req, res) => {
 
     console.log('✅ [CREATE COMPLAINT] Created successfully:', complaint._id.toString());
 
+    try {
+      await userOperations.addNotification(db, userId, {
+        type: 'complaint_submitted',
+        title: 'Complaint submitted',
+        message: `Your complaint "${complaint.title}" has been submitted successfully.`,
+        complaintId: complaint._id.toString(),
+        route: `/complaints/${complaint._id.toString()}`,
+      });
+    } catch (notificationError) {
+      console.warn('Could not add complaint notification:', notificationError.message);
+    }
+
+    try {
+      if (req.user?.email) {
+        await emailService.sendNotificationEmail(
+          req.user.email,
+          'Complaint submitted successfully',
+          `Your complaint titled "${complaint.title}" has been received and is now pending review.`,
+          { route: `/complaints/${complaint._id.toString()}` }
+        );
+      }
+    } catch (emailError) {
+      console.warn('Complaint submission email failed:', emailError.message);
+    }
+
     res.status(201).json({
       success: true,
       message: 'Complaint submitted successfully',
@@ -94,19 +120,14 @@ export const createComplaint = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [CREATE COMPLAINT] Error:', error.message);
-    console.error('Stack:', error.stack);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while creating complaint',
-      error: error.message,
-    });
+    next(error); // Pass to global error handler
   }
 };
 
 // @desc    Get current user's complaints
 // @route   GET /api/complaints/my-complaints
 // @access  Private
-export const getMyComplaints = async (req, res) => {
+export const getMyComplaints = async (req, res, next) => {
   try {
     const db = req.app.locals.db;
     const userId = req.user._id;
@@ -144,10 +165,7 @@ export const getMyComplaints = async (req, res) => {
     });
   } catch (error) {
     console.error('Get my complaints error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching complaints',
-    });
+    next(error); // Pass to global error handler
   }
 };
 
@@ -288,6 +306,32 @@ export const updateComplaintStatus = async (req, res) => {
       userId,
       userRole
     );
+
+    if (status === 'resolved') {
+      try {
+        const submitter = await userOperations.findById(db, complaint.userId);
+        if (submitter) {
+          await userOperations.addNotification(db, submitter._id, {
+            type: 'complaint_resolved',
+            title: 'Complaint resolved',
+            message: `Your complaint "${complaint.title}" has been marked as resolved.`,
+            complaintId: complaint._id.toString(),
+            route: `/complaints/${complaint._id.toString()}`,
+          });
+
+          if (submitter.email) {
+            await emailService.sendNotificationEmail(
+              submitter.email,
+              'Your complaint has been resolved',
+              `We have resolved your complaint titled "${complaint.title}". Thank you for raising it.`,
+              { route: `/complaints/${complaint._id.toString()}` }
+            );
+          }
+        }
+      } catch (resolveError) {
+        console.warn('Could not notify submitter about resolution:', resolveError.message);
+      }
+    }
 
     if (!complaint) {
       return res.status(404).json({

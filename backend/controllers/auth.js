@@ -1,5 +1,6 @@
 import { validationResult } from 'express-validator';
 import { userOperations, passwordUtils, jwtUtils } from '../utils/database.js';
+import emailService from '../services/emailService.js';
 
 // @desc    Register user
 // @route   POST /api/auth/register
@@ -80,8 +81,12 @@ export const register = async (req, res) => {
     );
     console.log('Generated email verification token:', verificationToken); // Debug log
 
-    // Send verification email (implement this)
-    // await emailService.sendVerificationEmail(email, verificationToken);
+    // Send verification email if configured
+    try {
+      await emailService.sendVerificationEmail(email, verificationToken);
+    } catch (sendError) {
+      console.warn('Verification email could not be sent:', sendError.message);
+    }
 
     res.status(201).json({
       success: true,
@@ -386,10 +391,8 @@ export const resetPassword = async (req, res) => {
 export const verifyEmail = async (req, res) => {
   try {
     const db = req.app.locals.db;
-    const user = await userOperations.verifyEmail(
-      db,
-      req.params.verificationtoken
-    );
+    const verificationToken = String(req.params.verificationtoken || '').trim();
+    const user = await userOperations.verifyEmail(db, verificationToken);
     console.log('User after email verification:', user);
 
     if (!user) {
@@ -431,7 +434,7 @@ export const verifyEmail = async (req, res) => {
 // @route   POST /api/auth/resend-verification
 // @access  Public
 export const resendVerificationEmail = async (req, res) => {
-  const { email } = req.body;
+  const email = String(req.body.email || '').trim();
   const db = req.app.locals.db;
 
   try {

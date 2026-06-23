@@ -1,5 +1,6 @@
 import { validationResult } from 'express-validator';
 import { managementOperations, userOperations } from '../utils/database.js';
+import emailService from '../services/emailService.js';
 import { ObjectId } from 'mongodb';
 
 // @desc    Validate incoming complaint (initial analysis)
@@ -372,6 +373,33 @@ export const updateTaskStatus = async (req, res) => {
       }
 
       const updated = await managementOperations.assignTaskToComplaint(db, complaintId, taskId, { technicianId, technicianName }, userId);
+
+      if (updated) {
+        try {
+          const technician = await userOperations.findById(db, technicianId);
+          if (technician) {
+            await userOperations.addNotification(db, technician._id, {
+              type: 'task_assigned',
+              title: 'New task assigned',
+              message: `A new task "${updated.tasks.find((t) => t._id.toString() === taskId)?.title || 'Task'}" has been assigned to you.`,
+              complaintId: updated._id.toString(),
+              taskId,
+              route: `/technician/tasks/${taskId}`,
+            });
+
+            if (technician.email) {
+              await emailService.sendNotificationEmail(
+                technician.email,
+                'A task has been assigned to you',
+                `You have been assigned a new task for complaint ${updated.complaintId}.`,
+                { route: `/technician/tasks/${taskId}` }
+              );
+            }
+          }
+        } catch (notifyError) {
+          console.warn('Task assignment notification failed:', notifyError.message);
+        }
+      }
 
       if (!updated) {
         return res.status(404).json({ success: false, message: 'Task or complaint not found or cannot be assigned' });
@@ -844,6 +872,32 @@ export const escalateComplaint = async (req, res) => {
       }
     );
 
+    if (complaint) {
+      try {
+        const targetUser = await userOperations.findById(db, escalateTo || userId);
+        if (targetUser) {
+          await userOperations.addNotification(db, targetUser._id, {
+            type: 'complaint_escalated',
+            title: 'Complaint escalated',
+            message: `Complaint ${complaint.complaintId} has been escalated for review.`,
+            complaintId: complaint._id.toString(),
+            route: `/complaints/${complaint._id.toString()}`,
+          });
+
+          if (targetUser.email) {
+            await emailService.sendNotificationEmail(
+              targetUser.email,
+              'Complaint escalated',
+              `Complaint ${complaint.complaintId} has been escalated. Please review it at your earliest convenience.`,
+              { route: `/complaints/${complaint._id.toString()}` }
+            );
+          }
+        }
+      } catch (escalationError) {
+        console.warn('Escalation notification failed:', escalationError.message);
+      }
+    }
+
     if (!complaint) {
       return res.status(404).json({
         success: false,
@@ -919,6 +973,32 @@ export const closeComplaint = async (req, res) => {
         closedBy: userId,
       }
     );
+
+    if (complaint) {
+      try {
+        const submitter = await userOperations.findById(db, complaint.userId);
+        if (submitter) {
+          await userOperations.addNotification(db, submitter._id, {
+            type: 'complaint_closed',
+            title: 'Complaint closed',
+            message: `Complaint ${complaint.complaintId} has been closed.`,
+            complaintId: complaint._id.toString(),
+            route: `/complaints/${complaint._id.toString()}`,
+          });
+
+          if (submitter.email) {
+            await emailService.sendNotificationEmail(
+              submitter.email,
+              'Complaint closed',
+              `Your complaint ${complaint.complaintId} has been closed. Thank you for your patience.`,
+              { route: `/complaints/${complaint._id.toString()}` }
+            );
+          }
+        }
+      } catch (closeError) {
+        console.warn('Complaint closure notification failed:', closeError.message);
+      }
+    }
 
     if (!complaint) {
       return res.status(404).json({

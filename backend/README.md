@@ -137,6 +137,25 @@ backend/
 | `JWT_SECRET`   | JWT secret key            | -                                          |
 | `JWT_EXPIRE`   | JWT expiration time       | 7d                                         |
 | `FRONTEND_URL` | Frontend URL for CORS     | http://localhost:5173                      |
+| `EMAIL_SERVICE`| Nodemailer service name   | gmail                                      |
+| `EMAIL_USER`   | SMTP sender email address | your-email@gmail.com                       |
+| `EMAIL_APP_PASSWORD` | SMTP app password   | your-gmail-app-password                    |
+
+## Email Configuration
+
+This project supports sending verification and complaint notification emails via Gmail SMTP.
+
+- Set `EMAIL_SERVICE=gmail` for Gmail transport.
+- Use `EMAIL_USER` for the Gmail address you want to send from.
+- Use `EMAIL_APP_PASSWORD` for the Gmail app password (recommended) or `EMAIL_PASS` if you prefer a generic password variable.
+
+If you need to use explicit SMTP settings instead of `EMAIL_SERVICE`, the backend already supports:
+
+```env
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_SECURE=false
+```
 
 ## Security Features
 

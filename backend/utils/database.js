@@ -219,6 +219,7 @@ export const userOperations = {
       emailVerified: false,
       emailVerificationToken: null,
       emailVerificationExpire: null,
+      notifications: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -325,6 +326,91 @@ export const userOperations = {
         },
       }
     );
+  },
+
+  // Add a notification to a user
+  async addNotification(db, userId, notificationData) {
+    const users = db.collection('users');
+    const notification = {
+      _id: new ObjectId(),
+      type: notificationData.type || 'info',
+      title: notificationData.title || 'Notification',
+      message: notificationData.message || '',
+      complaintId: notificationData.complaintId || null,
+      taskId: notificationData.taskId || null,
+      route: notificationData.route || null,
+      isRead: false,
+      createdAt: new Date(),
+    };
+
+    const result = await users.updateOne(
+      { _id: new ObjectId(userId) },
+      {
+        $push: { notifications: { $each: [notification], $position: 0 } },
+        $set: { updatedAt: new Date() },
+      }
+    );
+
+    return result.modifiedCount > 0 ? notification : null;
+  },
+
+  async getNotifications(db, userId, { unreadOnly = false, limit = 20, skip = 0 } = {}) {
+    const users = db.collection('users');
+    const projection = { notifications: 1 };
+    const user = await users.findOne({ _id: new ObjectId(userId) }, { projection });
+    if (!user) return [];
+
+    let notifications = Array.isArray(user.notifications) ? user.notifications : [];
+    if (unreadOnly) {
+      notifications = notifications.filter((item) => !item.isRead);
+    }
+
+    return notifications
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(skip, skip + limit);
+  },
+
+  async getUnreadNotificationsCount(db, userId) {
+    const users = db.collection('users');
+    const projection = { notifications: 1 };
+    const user = await users.findOne({ _id: new ObjectId(userId) }, { projection });
+    if (!user || !Array.isArray(user.notifications)) return 0;
+    return user.notifications.filter((item) => !item.isRead).length;
+  },
+
+  async markNotificationRead(db, userId, notificationId) {
+    const users = db.collection('users');
+    const result = await users.updateOne(
+      { _id: new ObjectId(userId), 'notifications._id': new ObjectId(notificationId) },
+      {
+        $set: {
+          'notifications.$.isRead': true,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    return result.modifiedCount > 0;
+  },
+
+  async markAllNotificationsRead(db, userId) {
+    const users = db.collection('users');
+    const user = await users.findOne({ _id: new ObjectId(userId) }, { projection: { notifications: 1 } });
+    if (!user || !Array.isArray(user.notifications) || user.notifications.length === 0) {
+      return false;
+    }
+
+    const result = await users.updateOne(
+      { _id: new ObjectId(userId) },
+      {
+        $set: {
+          'notifications.$[].isRead': true,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    return result.modifiedCount > 0;
   },
 
   // Get users with pagination

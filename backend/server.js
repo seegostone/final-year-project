@@ -42,8 +42,10 @@ app.use(
 );
 
 // Rate limiting (configurable via env)
+// Default: 1000 requests per 15 minutes = ~66 requests per minute = ~1.1 requests per second
+// Allows bursts but prevents abuse
 const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000;
-const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX, 10) || 100;
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX, 10) || 1000;
 
 const limiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
@@ -126,6 +128,7 @@ import userRoutes from './routes/users.js';
 import complaintRoutes from './routes/complaints.js';
 import managementRoutes from './routes/management.js';
 import technicianRoutes from './routes/technician.js';
+import notificationRoutes from './routes/notifications.js';
 
 // Routes
 const attachDb = (req, res, next) => {
@@ -143,6 +146,7 @@ app.use('/api/users', attachDb, userRoutes);
 app.use('/api/complaints', attachDb, complaintRoutes);
 app.use('/api/management', attachDb, managementRoutes);
 app.use('/api/technician', attachDb, technicianRoutes);
+app.use('/api/notifications', attachDb, notificationRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -162,11 +166,25 @@ app.use('*', (req, res) => {
   });
 });
 
-// Global error handler
-app.use((err, req, res) => {
-  logger.error(err.stack);
+// Global error handler (MUST have 4 parameters for Express to recognize it)
+app.use((err, req, res, next) => {
+  // Log the full error with stack trace
+  logger.error('🔴 [ERROR]', {
+    message: err.message,
+    stack: err.stack,
+    name: err.name,
+    code: err.code,
+    url: req.url,
+    method: req.method,
+    ip: req.ip,
+    timestamp: new Date().toISOString(),
+  });
 
-  // Multer errors
+  // Don't expose stack trace in production
+  const isDev = process.env.NODE_ENV !== 'production';
+  const errorDetails = isDev ? { stack: err.stack, code: err.code } : {};
+
+  // Multer errors (file upload)
   if (err.name === 'MulterError') {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
@@ -180,6 +198,11 @@ app.use((err, req, res) => {
         message: 'Too many files',
       });
     }
+    return res.status(400).json({
+      success: false,
+      message: 'File upload error',
+      ...errorDetails,
+    });
   }
 
   if (err.message && err.message.includes('Invalid file type')) {
@@ -189,18 +212,33 @@ app.use((err, req, res) => {
     });
   }
 
-  // MongoDB errors
-  if (err.name === 'MongoServerError') {
-    if (err.code === 11000) {
-      const field = Object.keys(err.keyPattern)[0];
-      return res.status(400).json({
-        success: false,
-        message: `${field} already exists`,
-      });
-    }
+  // MongoDB Duplicate Key Error
+  if (err.name === 'MongoServerError' && err.code === 11000) {
+    const field = Object.keys(err.keyPattern)[0];
+    return res.status(400).json({
+      success: false,
+      message: `${field} already exists`,
+    });
   }
 
-  // JWT errors
+  // MongoDB Validation Error
+  if (err.name === 'MongoServerError' && err.code === 121) {
+    return res.status(400).json({
+      success: false,
+      message: 'Document validation failed',
+      ...errorDetails,
+    });
+  }
+
+  // MongoDB Cast Error (Invalid ObjectId)
+  if (err.name === 'BSONError' || err.name === 'CastError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid ID format',
+    });
+  }
+
+  // JWT Errors
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({
       success: false,
@@ -215,10 +253,45 @@ app.use((err, req, res) => {
     });
   }
 
-  // Default error
+  // Validation Error
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: err.errors,
+      ...errorDetails,
+    });
+  }
+
+  // CORS Error
+  if (err.message === 'CORS not allowed') {
+    return res.status(403).json({
+      success: false,
+      message: 'CORS policy violation',
+    });
+  }
+
+  // Database connection error
+  if (err.message === 'Database connection not available') {
+    return res.status(503).json({
+      success: false,
+      message: 'Database connection unavailable',
+    });
+  }
+
+  // Timeout errors
+  if (err.code === 'ETIMEDOUT' || err.code === 'ESOCKETTIMEDOUT') {
+    return res.status(504).json({
+      success: false,
+      message: 'Request timeout',
+    });
+  }
+
+  // Default 500 error
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal Server Error',
+    ...(isDev && { details: errorDetails }),
   });
 });
 
@@ -284,6 +357,30 @@ if (process.env.NODE_ENV !== 'test') {
     process.exit(1);
   });
 }
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('🔴 [UNHANDLED REJECTION]', {
+    reason: reason instanceof Error ? reason.message : reason,
+    stack: reason instanceof Error ? reason.stack : undefined,
+    promise: String(promise),
+    timestamp: new Date().toISOString(),
+  });
+  // In production, you might want to exit the process
+  // process.exit(1);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('🔴 [UNCAUGHT EXCEPTION]', {
+    message: error.message,
+    stack: error.stack,
+    name: error.name,
+    timestamp: new Date().toISOString(),
+  });
+  // Uncaught exceptions usually mean the process is in an unstable state
+  process.exit(1);
+});
 
 export { db };
 export default app;

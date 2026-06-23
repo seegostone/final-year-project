@@ -1,5 +1,6 @@
 
 import { Fragment, useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { motion } from 'motion/react';
 import { 
   AlertCircle, 
   Calendar, 
@@ -16,9 +17,15 @@ import {
   Trash2,
   //TrendingUp
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Header from './Header';
 import complaintService from '../services/complaintsApi';
+import authService from '../services/api';
 import { useFormValidation } from '../hooks/useFormValidation';
+
+let lastComplaintDashboardFetch = 0;
+const COMPLAINT_DASHBOARD_FETCH_COOLDOWN_MS = 1500;
+
 const statusOptions = [
   { value: 'all', label: 'All Statuses' },
   { value: 'pending', label: 'Pending' },
@@ -139,7 +146,7 @@ const formatHistoryAction = (action) => {
 
 // Enhanced StatCard with icons
 const StatCard = ({ title, value, detail, accent, icon: Icon }) => (
-  <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:shadow-md">
+  <div className="relative overflow-hidden border border-[#e2e8f0] bg-white p-6 transition-all">
     <div className="flex items-start justify-between">
       <div className="flex-1">
         <p className="text-sm font-medium text-slate-600">{title}</p>
@@ -165,10 +172,10 @@ const Badge = ({ label, isActive, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`group relative rounded-lg border px-4 py-2.5 text-sm font-medium transition-all ${
+    className={`group relative border px-4 py-2.5 text-sm font-medium transition ${
       isActive
-        ? 'border-slate-800 bg-slate-900 text-white shadow-md'
-        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 hover:shadow-sm'
+        ? 'border-slate-800 bg-slate-900 text-white'
+        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50'
     }`}
   >
     {label}
@@ -238,7 +245,18 @@ export default function ComplaintDashboard() {
     resetForm,
   } = useFormValidation(initialFormValues, validateComplaintForm);
 
+  const navigate = useNavigate();
   const timePanelRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const initialLoadRef = useRef(true);
+  const hasInitialFetchRef = useRef(false);
+  // Auto-dismiss notification after 3.5 seconds
+  useEffect(() => {
+    if (!notification) return;
+    const timer = setTimeout(() => setNotification(null), 3500);
+    return () => clearTimeout(timer);
+  }, [notification]);
+
   const toggleHistory = (complaintId) => {
     setExpandedComplaintId((current) => (current === complaintId ? null : complaintId));
   };
@@ -259,17 +277,17 @@ export default function ComplaintDashboard() {
       return matchesSearch && matchesCategory;
     });
     
-    console.log('🔵 [FILTERED COMPLAINTS] Total complaints:', complaints.length, 'Filtered:', result.length, 'Search:', searchQuery, 'Category:', categoryFilter);
-    
     return result;
   }, [complaints, searchQuery, categoryFilter]);
 
-  const refreshDashboardStats = useCallback(async (overrideTimeRange = null, overrideStartDate = undefined, overrideEndDate = undefined) => {
+  const debounceRef = useRef(null);
+
+  const refreshDashboardStats = useCallback(async (timeRangeVal, startDateVal, endDateVal) => {
     try {
       const result = await complaintService.getComplaintStats(
-        overrideTimeRange ?? timeFilter,
-        overrideStartDate !== undefined ? overrideStartDate : customStartDate,
-        overrideEndDate !== undefined ? overrideEndDate : customEndDate
+        timeRangeVal,
+        startDateVal,
+        endDateVal
       );
       if (result.success) {
         setDashboardStats(result.data || {});
@@ -277,32 +295,25 @@ export default function ComplaintDashboard() {
     } catch (error) {
       console.error('Failed to load complaint dashboard stats:', error);
     }
-  }, [timeFilter, customStartDate, customEndDate]);
+  }, []);
 
   const refreshComplaints = useCallback(
-    async (page, overrideTimeRange = null, overrideStartDate = undefined, overrideEndDate = undefined) => {
-      page = page ?? pagination.currentPage;
+    async (page, statusVal, categoryVal, timeRangeVal, startDateVal, endDateVal, searchVal) => {
       try {
         setLoading(true);
         const result = await complaintService.getMyComplaints({
           page,
           limit: 10,
-          status: statusFilter,
-          category: categoryFilter,
-          timeRange: overrideTimeRange ?? timeFilter,
-          startDate: overrideStartDate !== undefined ? overrideStartDate : customStartDate,
-          endDate: overrideEndDate !== undefined ? overrideEndDate : customEndDate,
-          search: searchQuery,
+          status: statusVal,
+          category: categoryVal,
+          timeRange: timeRangeVal,
+          startDate: startDateVal,
+          endDate: endDateVal,
+          search: searchVal,
         });
-
-        console.log('🔵 [REFRESH COMPLAINTS] API Result:', result);
-        console.log('🔵 [REFRESH COMPLAINTS] Result.success:', result.success);
-        console.log('🔵 [REFRESH COMPLAINTS] Result.data:', result.data);
-        console.log('🔵 [REFRESH COMPLAINTS] Result.data type:', typeof result.data, 'Is array:', Array.isArray(result.data));
 
         if (result.success) {
           const complaintsArray = result.data || [];
-          console.log('✅ [REFRESH COMPLAINTS] Setting complaints to:', complaintsArray.length, 'items');
           setComplaints(complaintsArray);
           setPagination(result.pagination || { currentPage: 1, totalPages: 1 });
         } else {
@@ -317,22 +328,71 @@ export default function ComplaintDashboard() {
         setLoading(false);
       }
     },
-    [statusFilter, timeFilter, categoryFilter, searchQuery, pagination.currentPage, customStartDate, customEndDate]
+    []
   );
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      refreshDashboardStats();
-    }, 0);
-    return () => clearTimeout(t);
-  }, [refreshDashboardStats]);
+  // ── Initial load on mount ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      refreshComplaints(pagination.currentPage);
-    }, 0);
-    return () => clearTimeout(t);
-  }, [refreshComplaints, pagination.currentPage]);
+    if (!authService.isAuthenticated()) {
+      authService.logoutAndRedirect();
+      return;
+    }
+
+    if (hasInitialFetchRef.current) {
+      return;
+    }
+    hasInitialFetchRef.current = true;
+
+    const now = Date.now();
+    if (now - lastComplaintDashboardFetch < COMPLAINT_DASHBOARD_FETCH_COOLDOWN_MS) {
+      return;
+    }
+    lastComplaintDashboardFetch = now;
+
+    let isMounted = true;
+
+    const initLoad = async () => {
+      if (isMounted) {
+        await refreshDashboardStats('all', '', '');
+        await refreshComplaints(1, 'all', 'all', 'all', '', '', '');
+      }
+    };
+
+    initLoad();
+    return () => { isMounted = false; };
+  }, []); // Only on mount
+
+  // ── Debounced fetch when filters change ────────────────────────────────────────
+
+  useEffect(() => {
+    if (initialLoadRef.current) {
+      initialLoadRef.current = false;
+      return;
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    
+    debounceRef.current = setTimeout(() => {
+      if (timeFilter === 'custom' && (!customStartDate || !customEndDate)) {
+        return;
+      }
+      refreshDashboardStats(timeFilter, customStartDate, customEndDate);
+      refreshComplaints(1, statusFilter, categoryFilter, timeFilter, customStartDate, customEndDate, searchQuery);
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [statusFilter, categoryFilter, searchQuery, timeFilter, customStartDate, customEndDate, refreshDashboardStats, refreshComplaints]);
+
+  // ── Fetch when page changes (no debounce) ───────────────────────────────────────
+
+  useEffect(() => {
+    if (pagination.currentPage === 1) return; // Skip: already fetched by filter effect
+    
+    refreshComplaints(pagination.currentPage, statusFilter, categoryFilter, timeFilter, customStartDate, customEndDate, searchQuery);
+  }, [pagination.currentPage, statusFilter, categoryFilter, timeFilter, customStartDate, customEndDate, searchQuery, refreshComplaints]);
 
   const handlePresetFilterChange = (selected) => {
     setTimeFilter(selected);
@@ -349,18 +409,6 @@ export default function ComplaintDashboard() {
     setPagination((prev) => ({ ...prev, currentPage: 1 }));
     setShowTimePanel(false);
   };
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (timeFilter === 'custom' && (!customStartDate || !customEndDate)) {
-        return;
-      }
-      refreshDashboardStats();
-      refreshComplaints(1);
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [statusFilter, categoryFilter, searchQuery, timeFilter, customStartDate, customEndDate, refreshDashboardStats, refreshComplaints]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -402,6 +450,10 @@ export default function ComplaintDashboard() {
       if (result.success) {
         setNotification(result.data?.message || 'Complaint submitted successfully');
         resetForm();
+        // Clear file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
         setStatusFilter('all');
         setCategoryFilter('all');
         setTimeFilter('all');
@@ -412,7 +464,7 @@ export default function ComplaintDashboard() {
         // Add delay to allow database write and state updates to complete
         await new Promise((resolve) => setTimeout(resolve, 500));
         await refreshDashboardStats('all', '', '');
-        await refreshComplaints(1, 'all', '', '');
+        await refreshComplaints(1, 'all', 'all', 'all', '', '', '');
       } else {
         setErrorMessage(result.error || 'Unable to submit complaint.');
         setServerErrors(result.validationErrors);
@@ -455,8 +507,8 @@ export default function ComplaintDashboard() {
         setComplaintToDelete(null);
         // Refresh the list
         await new Promise((resolve) => setTimeout(resolve, 500));
-        await refreshDashboardStats();
-        await refreshComplaints(pagination.currentPage);
+        await refreshDashboardStats(timeFilter, customStartDate, customEndDate);
+        await refreshComplaints(pagination.currentPage, statusFilter, categoryFilter, timeFilter, customStartDate, customEndDate, searchQuery);
       } else {
         setErrorMessage(result.error || 'Unable to delete complaint.');
       }
@@ -471,145 +523,157 @@ export default function ComplaintDashboard() {
       <Header showAuth={true} />
       
       <div className="mx-auto max-w-7xl p-6 md:p-8">
-        {/* Page Header */}
-        <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Complaint Management</h1>
-            <p className="text-base text-slate-600">
-              Submit and track maintenance requests for Makerere University estates.
-            </p>
-          </div>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="space-y-6"
+        >
+          {/* Page Header */}
+          <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900">Complaint Management</h1>
+              <p className="text-base text-slate-600">
+                Submit and track maintenance requests for Makerere University estates.
+              </p>
+            </div>
 
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowTimePanel((current) => !current)}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              <Calendar className="h-4 w-4 text-slate-500" />
-              <span>{formatRangeLabel({ timeFilter, customStartDate, customEndDate })}</span>
-              <ChevronDown className="h-4 w-4 text-slate-500" />
-            </button>
-
-            {showTimePanel && (
-              <div
-                ref={timePanelRef}
-                className="absolute right-0 z-50 mt-3 w-80 rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl"
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowTimePanel((current) => !current)}
+                className="inline-flex items-center gap-2 border border-[#e2e8f0] bg-white px-4 py-2 text-sm font-medium text-[#1e2937] transition hover:border-[#1e3a5f]"
               >
-                <div className="space-y-3">
-                  <div className="grid gap-2">
-                    {timeOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => handlePresetFilterChange(option.value)}
-                        className={`w-full rounded-2xl px-3 py-2 text-left text-sm font-medium transition ${
-                          timeFilter === option.value
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
+                <Calendar className="h-4 w-4 text-[#64748b]" />
+                <span>{formatRangeLabel({ timeFilter, customStartDate, customEndDate })}</span>
+                <ChevronDown className="h-4 w-4 text-[#64748b]" />
+              </button>
 
-                  {timeFilter === 'custom' && (
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <label htmlFor="customStartDate" className="space-y-2 text-sm font-medium text-slate-700">
-                          Start date
-                          <input
-                            id="customStartDate" name="customStartDate"
-                            type="date"
-                            value={customStartDate}
-                            onChange={(event) => setCustomStartDate(event.target.value)}
-                            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                          />
-                        </label>
-                        <label htmlFor="customEndDate" className="space-y-2 text-sm font-medium text-slate-700">
-                          End date
-                          <input
-                            id="customEndDate" name="customEndDate"
-                            type="date"
-                            value={customEndDate}
-                            onChange={(event) => setCustomEndDate(event.target.value)}
-                            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                          />
-                        </label>
-                      </div>
-                      <div className="mt-4 flex items-center justify-between gap-2">
+              {showTimePanel && (
+                <div
+                  ref={timePanelRef}
+                  className="absolute right-0 z-50 mt-3 w-80 border border-[#e2e8f0] bg-white p-4"
+                >
+                  <div className="space-y-3">
+                    <div className="grid gap-2">
+                      {timeOptions.map((option) => (
                         <button
+                          key={option.value}
                           type="button"
-                          onClick={handleApplyCustomRange}
-                          disabled={!customStartDate || !customEndDate}
-                          className="inline-flex min-w-[120px] items-center justify-center rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                          onClick={() => handlePresetFilterChange(option.value)}
+                          className={`w-full px-3 py-2 text-left text-sm font-medium transition ${
+                            timeFilter === option.value
+                              ? 'bg-[#1e3a5f] text-white'
+                              : 'bg-[#f8fafc] text-[#1e2937] hover:bg-[#eef2f7]'
+                          }`}
                         >
-                          Update
+                          {option.label}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTimeFilter('all');
-                            setCustomStartDate('');
-                            setCustomEndDate('');
-                            setShowTimePanel(false);
-                            setPagination((prev) => ({ ...prev, currentPage: 1 }));
-                          }}
-                          className="inline-flex min-w-[120px] items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                        >
-                          Cancel
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  )}
+
+                    {timeFilter === 'custom' && (
+                      <div className="border border-[#e2e8f0] bg-[#f8fafc] p-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <label htmlFor="customStartDate" className="space-y-2 text-sm font-medium text-[#1e2937]">
+                            Start date
+                            <input
+                              id="customStartDate" name="customStartDate"
+                              type="date"
+                              value={customStartDate}
+                              onChange={(event) => setCustomStartDate(event.target.value)}
+                              className="w-full border border-[#e2e8f0] bg-white px-3 py-2 text-sm text-[#1e2937] outline-none transition focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7]"
+                            />
+                          </label>
+                          <label htmlFor="customEndDate" className="space-y-2 text-sm font-medium text-[#1e2937]">
+                            End date
+                            <input
+                              id="customEndDate" name="customEndDate"
+                              type="date"
+                              value={customEndDate}
+                              onChange={(event) => setCustomEndDate(event.target.value)}
+                              className="w-full border border-[#e2e8f0] bg-white px-3 py-2 text-sm text-[#1e2937] outline-none transition focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7]"
+                            />
+                          </label>
+                        </div>
+                        <div className="mt-4 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={handleApplyCustomRange}
+                            disabled={!customStartDate || !customEndDate}
+                            className="inline-flex min-w-[120px] items-center justify-center bg-[#7B1A1A] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5A1313] disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Update
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTimeFilter('all');
+                              setCustomStartDate('');
+                              setCustomEndDate('');
+                              setShowTimePanel(false);
+                              setPagination((prev) => ({ ...prev, currentPage: 1 }));
+                            }}
+                            className="inline-flex min-w-[120px] items-center justify-center border border-[#e2e8f0] bg-white px-4 py-2 text-sm font-medium text-[#1e2937] transition hover:bg-[#f8fafc]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Stats Cards */}
-        <div className="mb-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total Complaints"
-            value={dashboardStats.total ?? 0}
-            detail="All time submissions"
-            accent="text-slate-900"
-            icon={FileText}
-          />
-          <StatCard
-            title="Pending"
-            value={dashboardStats.pending ?? 0}
-            detail="Awaiting action"
-            accent="text-amber-600"
-            icon={Clock}
-          />
-          <StatCard
-            title="In Progress"
-            value={dashboardStats.inProgress ?? 0}
-            detail="Currently handling"
-            accent="text-blue-600"
-            icon={AlertCircle}
-          />
-          <StatCard
-            title="Resolved"
-            value={dashboardStats.resolved ?? 0}
-            detail="Successfully completed"
-            accent="text-emerald-600"
-            icon={CheckCircle2}
-          />
-        </div>
+          {/* Stats Cards */}
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: 'easeOut', delay: 0.08 }}
+            className="mb-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <StatCard
+              title="Total Complaints"
+              value={dashboardStats.total ?? 0}
+              detail="All time submissions"
+              accent="text-slate-900"
+              icon={FileText}
+            />
+            <StatCard
+              title="Pending"
+              value={dashboardStats.pending ?? 0}
+              detail="Awaiting action"
+              accent="text-amber-600"
+              icon={Clock}
+            />
+            <StatCard
+              title="In Progress"
+              value={dashboardStats.inProgress ?? 0}
+              detail="Currently handling"
+              accent="text-blue-600"
+              icon={AlertCircle}
+            />
+            <StatCard
+              title="Resolved"
+              value={dashboardStats.resolved ?? 0}
+              detail="Successfully completed"
+              accent="text-emerald-600"
+              icon={CheckCircle2}
+            />
+          </motion.div>
 
-        {/* Main Content Grid */}
-        <div className="grid gap-6 lg:grid-cols-5">
-          {/* Submit Form */}
+          {/* Main Content Grid */}
+          <div className="grid gap-6 lg:grid-cols-5">
+            {/* Submit Form */}
           <div className="lg:col-span-2">
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border border-[#e2e8f0] bg-white">
               <div className="border-b border-slate-100 p-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                    <span className="inline-flex items-center bg-[#f8fafc] px-2.5 py-1 text-xs font-semibold text-[#1e2937]">
                       NEW COMPLAINT
                     </span>
                     <h2 className="mt-3 text-xl font-semibold text-slate-900">Submit a Request</h2>
@@ -622,16 +686,16 @@ export default function ComplaintDashboard() {
 
               <div className="p-6">
                 {notification && (
-                  <div className="mb-6 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="mb-6 flex items-start gap-3 border border-emerald-200 bg-emerald-50 p-4">
                     <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600" />
                     <p className="text-sm font-medium text-emerald-800">{notification}</p>
                   </div>
                 )}
 
                 {errorMessage && (
-                  <div className="mb-6 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4">
-                    <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-rose-600" />
-                    <p className="text-sm font-medium text-rose-800">{errorMessage}</p>
+                  <div className="mb-6 flex items-start gap-3 border border-red-200 bg-red-50 p-4">
+                    <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+                    <p className="text-sm font-medium text-red-700">{errorMessage}</p>
                   </div>
                 )}
 
@@ -645,7 +709,7 @@ export default function ComplaintDashboard() {
                         value={values.title}
                         onChange={(event) => handleChange('title', event.target.value)}
                         onBlur={() => handleBlur('title')}
-                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                        className="w-full px-4 py-2.5 border border-[#e2e8f0] bg-white text-[#1e2937] outline-none transition focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7]"
                         placeholder="e.g., Water leak in block C"
                         autoComplete="organization-title"
                       />
@@ -662,7 +726,7 @@ export default function ComplaintDashboard() {
                         value={values.location}
                         onChange={(event) => handleChange('location', event.target.value)}
                         onBlur={() => handleBlur('location')}
-                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                        className="w-full px-4 py-2.5 border border-[#e2e8f0] bg-white text-[#1e2937] outline-none transition focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7]"
                         placeholder="e.g., Block C, Floor 2"
                         autoComplete="street-address"
                       />
@@ -679,7 +743,7 @@ export default function ComplaintDashboard() {
                       value={values.category}
                       onChange={(event) => handleChange('category', event.target.value)}
                       onBlur={() => handleBlur('category')}
-                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                      className="w-full px-4 py-2.5 border border-[#e2e8f0] bg-white text-[#1e2937] outline-none transition focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7]"
                     >
                       {categoryOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -700,7 +764,7 @@ export default function ComplaintDashboard() {
                       onChange={(event) => handleChange('description', event.target.value)}
                       onBlur={() => handleBlur('description')}
                       rows={4}
-                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                      className="w-full px-4 py-2.5 border border-[#e2e8f0] bg-white text-[#1e2937] outline-none transition focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7]"
                       placeholder="Provide detailed information about the issue..."
                     />
                     {touched.description && errors.description && (
@@ -715,7 +779,7 @@ export default function ComplaintDashboard() {
                         id="urgency" name="urgency"
                         value={values.urgency}
                         onChange={(event) => handleChange('urgency', event.target.value)}
-                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                        className="w-full px-4 py-2.5 border border-[#e2e8f0] bg-white text-[#1e2937] outline-none transition focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7]"
                       >
                         {urgencyOptions.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -728,11 +792,12 @@ export default function ComplaintDashboard() {
                     <div className="space-y-2">
                       <label htmlFor="image" className="text-sm font-medium text-slate-700">Attachment</label>
                       <input
+                        ref={fileInputRef}
                         id="image" name="image"
                         type="file"
                         accept="image/*"
                         onChange={(event) => handleFileChange(event.target.files?.[0] || null)}
-                        className="w-full cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-900 outline-none transition file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-slate-800 focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                        className="w-full cursor-pointer border border-[#e2e8f0] bg-white px-4 py-2 text-sm text-[#1e2937] outline-none transition focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7]"
                       />
                     </div>
                   </div>
@@ -741,7 +806,7 @@ export default function ComplaintDashboard() {
                     <button
                       type="submit"
                       disabled={submitLoading}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex w-full items-center justify-center gap-2 bg-[#7B1A1A] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#5A1313] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {submitLoading ? (
                         <>
@@ -764,15 +829,15 @@ export default function ComplaintDashboard() {
           {/* Complaints List */}
           <div className="lg:col-span-3 space-y-6">
             {/* Filters */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="border border-[#e2e8f0] bg-white p-6">
               <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Complaint History</h2>
                   <p className="mt-1 text-sm text-slate-600">View and filter your submissions</p>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2">
-                  <FileText className="h-4 w-4 text-slate-600" />
-                  <span className="text-sm font-medium text-slate-700">
+                <div className="inline-flex items-center gap-2 bg-[#f8fafc] px-3 py-2">
+                  <FileText className="h-4 w-4 text-[#64748b]" />
+                  <span className="text-sm font-medium text-[#1e2937]">
                     {filteredComplaints.length} result{filteredComplaints.length !== 1 ? 's' : ''}
                   </span>
                 </div>
@@ -780,7 +845,7 @@ export default function ComplaintDashboard() {
 
               <div className="mb-5 flex flex-col gap-3 sm:flex-row">
                 <div className="relative flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]" />
                   <input
                     id="searchQuery" name="searchQuery"
                     type="search"
@@ -791,13 +856,13 @@ export default function ComplaintDashboard() {
                     }}
                     placeholder="Search complaints..."
                     aria-label="Search complaints"
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                    className="w-full border border-[#e2e8f0] bg-[#f8fafc] py-2.5 pl-10 pr-4 text-sm text-[#1e2937] outline-none transition focus:border-[#1e3a5f] focus:bg-white focus:ring-2 focus:ring-[#eef2f7]"
                   />
                 </div>
                 <div className="relative flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-slate-500" />
+                  <Filter className="h-4 w-4 text-[#64748b]" />
                   <select
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                    className="border border-[#e2e8f0] bg-[#f8fafc] px-4 py-2.5 text-sm font-medium text-[#1e2937] outline-none transition focus:border-[#1e3a5f] focus:bg-white focus:ring-2 focus:ring-[#eef2f7]"
                     value={categoryFilter}
                     onChange={(event) => {
                       setCategoryFilter(event.target.value);
@@ -829,7 +894,7 @@ export default function ComplaintDashboard() {
             </div>
 
             {/* Table */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border border-[#e2e8f0] bg-white">
               <div className="overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
@@ -857,11 +922,11 @@ export default function ComplaintDashboard() {
                         <tr>
                           <td colSpan={6} className="px-6 py-12 text-center">
                             <div className="flex flex-col items-center gap-3">
-                              <div className="rounded-full bg-slate-100 p-3">
-                                <FileText className="h-6 w-6 text-slate-400" />
+                              <div className="bg-[#f8fafc] p-3">
+                                <FileText className="h-6 w-6 text-[#cbd5e1]" />
                               </div>
-                              <p className="text-sm font-medium text-slate-600">No complaints found</p>
-                              <p className="text-xs text-slate-500">Try adjusting your filters</p>
+                              <p className="text-sm font-medium text-[#64748b]">No complaints found</p>
+                              <p className="text-xs text-[#94a3b8]">Try adjusting your filters</p>
                             </div>
                           </td>
                         </tr>
@@ -878,7 +943,7 @@ export default function ComplaintDashboard() {
                                   <button
                                     type="button"
                                     onClick={() => toggleHistory(complaint._id)}
-                                    className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-200"
+                                    className="border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1 text-xs font-semibold text-[#1e2937] transition hover:border-[#1e3a5f] hover:bg-[#eef2f7]"
                                   >
                                     {expandedComplaintId === complaint._id ? (
                                       <span className="inline-flex items-center gap-1">
@@ -895,17 +960,17 @@ export default function ComplaintDashboard() {
                                 </div>
                               </td>
                               <td className="px-6 py-4">
-                                <span className="inline-flex items-center rounded-md bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+                                <span className="inline-flex items-center bg-[#f8fafc] px-2.5 py-1 text-xs font-medium text-[#1e2937]">
                                   {complaint.category}
                                 </span>
                               </td>
                               <td className="px-6 py-4">
-                                <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ${getStatusColor(complaint.status)}`}>
+                                <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold ${getStatusColor(complaint.status)}`}>
                                   {complaint.status.replace(/-/g, ' ')}
                                 </span>
                               </td>
                               <td className="px-6 py-4">
-                                <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ${getUrgencyColor(complaint.urgency)}`}>
+                                <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold ${getUrgencyColor(complaint.urgency)}`}>
                                   {complaint.urgency}
                                 </span>
                               </td>
@@ -914,7 +979,7 @@ export default function ComplaintDashboard() {
                                 {complaint.status === 'pending' && (
                                   <button
                                     onClick={() => handleDeleteComplaint(complaint._id)}
-                                    className="inline-flex items-center gap-2 rounded-md bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
+                                    className="inline-flex items-center gap-2 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
                                     title="Delete pending complaint"
                                   >
                                     <Trash2 className="h-4 w-4" />
@@ -935,7 +1000,7 @@ export default function ComplaintDashboard() {
                                       {complaint.history?.map((entry, index) => (
                                         <div
                                           key={`${entry.action}-${index}`}
-                                          className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                                          className="border border-[#e2e8f0] bg-white p-4"
                                         >
                                           <div className="flex items-center justify-between gap-3">
                                             <p className="text-sm font-semibold text-slate-900">{formatHistoryAction(entry.action)}</p>
@@ -968,17 +1033,17 @@ export default function ComplaintDashboard() {
 
               {/* Pagination */}
               {filteredComplaints.length > 0 && (
-                <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
-                  <p className="text-sm text-slate-600">
-                    Page <span className="font-medium text-slate-900">{pagination.currentPage}</span> of{' '}
-                    <span className="font-medium text-slate-900">{pagination.totalPages}</span>
+                <div className="flex items-center justify-between border-t border-[#e2e8f0] px-6 py-4">
+                  <p className="text-sm text-[#64748b]">
+                    Page <span className="font-medium text-[#1e2937]">{pagination.currentPage}</span> of{' '}
+                    <span className="font-medium text-[#1e2937]">{pagination.totalPages}</span>
                   </p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       disabled={pagination.currentPage <= 1}
                       onClick={() => handlePageChange('prev')}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex items-center gap-2 border border-[#e2e8f0] bg-white px-4 py-2 text-sm font-medium text-[#1e2937] transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <ChevronLeft className="h-4 w-4" />
                       Previous
@@ -987,7 +1052,7 @@ export default function ComplaintDashboard() {
                       type="button"
                       disabled={pagination.currentPage >= pagination.totalPages}
                       onClick={() => handlePageChange('next')}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex items-center gap-2 border border-[#e2e8f0] bg-white px-4 py-2 text-sm font-medium text-[#1e2937] transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Next
                       <ChevronRight className="h-4 w-4" />
@@ -1003,39 +1068,39 @@ export default function ComplaintDashboard() {
       {/* Delete Confirmation Modal */}
       {deleteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white shadow-lg">
+          <div className="w-full max-w-sm border border-[#e2e8f0] bg-white">
             {/* Modal Header */}
-            <div className="border-b border-slate-200 bg-gradient-to-r from-red-50 to-orange-50 px-6 py-4">
-              <h2 className="text-lg font-semibold text-slate-900">Delete Complaint</h2>
+            <div className="border-b border-[#e2e8f0] bg-red-50 px-6 py-4">
+              <h2 className="text-lg font-semibold text-[#1e2937]">Delete Complaint</h2>
             </div>
 
             {/* Modal Body */}
             <div className="px-6 py-6">
               <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+                <div className="flex h-10 w-10 items-center justify-center bg-red-100">
                   <AlertCircle className="h-6 w-6 text-red-600" />
                 </div>
-                <p className="text-base font-medium text-slate-900">Are you sure?</p>
+                <p className="text-base font-medium text-[#1e2937]">Are you sure?</p>
               </div>
-              <p className="text-sm text-slate-600 leading-relaxed">
+              <p className="text-sm text-[#64748b] leading-relaxed">
                 This will permanently delete this complaint. This action cannot be undone.
               </p>
             </div>
 
             {/* Modal Footer */}
-            <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 flex gap-3 justify-end">
+            <div className="border-t border-[#e2e8f0] bg-[#f8fafc] px-6 py-4 flex gap-3 justify-end">
               <button
                 onClick={() => {
                   setDeleteModalOpen(false);
                   setComplaintToDelete(null);
                 }}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+                className="border border-[#e2e8f0] bg-white px-4 py-2.5 text-sm font-medium text-[#1e2937] hover:bg-[#eef2f7] transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
-                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                className="bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 transition-colors"
               >
                 Delete
               </button>

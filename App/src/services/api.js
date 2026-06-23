@@ -178,21 +178,33 @@ export const authService = {
 
   async verifyEmail(token) {
     try {
-      const response = await axiosInstance.get(`/auth/verify-email/${token}`);
+      const cleanedToken = String(token || '').trim();
+      if (!cleanedToken) {
+        return {
+          success: false,
+          error: 'Verification token is required.',
+          type: 'VALIDATION_ERROR',
+          status: 400,
+        };
+      }
+
+      const response = await axiosInstance.get(
+        `/auth/verify-email/${encodeURIComponent(cleanedToken)}`
+      );
       
       return {
         success: true,
         data: response.data || response,
       };
     } catch (error) {
-      console.error('Verification error:', error);
+      console.error('Verification error:', error?.response?.data || error);
       const formattedError = handleApiError(error);
       
       return {
         success: false,
         error: formattedError.message,
         type: formattedError.type,
-        status: error.status || 500,
+        status: formattedError.status || 500,
       };
     }
   },

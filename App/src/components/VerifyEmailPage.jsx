@@ -1,6 +1,87 @@
 // frontend/src/components/VerifyEmailModal.jsx
 import { useState, useEffect } from 'react';
-import { authService } from '../services/api';
+import { useNavigate, useParams } from 'react-router-dom';
+import { getRoleRedirectPath } from '../hooks/useRoleRedirect';
+import authService from '../services/api';
+
+export function VerifyEmailPage() {
+  const navigate = useNavigate();
+  const { verificationToken } = useParams();
+  const [status, setStatus] = useState('pending');
+  const [message, setMessage] = useState('Verifying your email...');
+
+  useEffect(() => {
+    const verify = async () => {
+      if (!verificationToken) {
+        setStatus('error');
+        setMessage('Verification token is missing.');
+        return;
+      }
+
+      try {
+        const result = await authService.verifyEmail(verificationToken);
+
+        if (result.success) {
+          const token = result.data.token;
+          const user = result.data.user;
+
+          if (token) {
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(user));
+            try {
+              const expiry = authService.getTokenExpiry(token);
+              if (expiry) localStorage.setItem('tokenExpiry', expiry);
+            } catch {
+              // ignore expiry calculation errors
+            }
+          }
+
+          setStatus('success');
+          setMessage('Email verified successfully! Redirecting...');
+
+          setTimeout(() => {
+            const redirectPath = authService.isAuthenticated()
+              ? authService.getUserRole()
+                ? getRoleRedirectPath(authService.getUserRole())
+                : '/dashboard'
+              : '/login';
+            navigate(redirectPath, { replace: true });
+          }, 2000);
+        } else {
+          setStatus('error');
+          setMessage(result.error || 'Invalid or expired verification token.');
+        }
+      } catch (error) {
+        setStatus('error');
+        setMessage('Unable to verify your email at this time. Please try again later.');
+      }
+    };
+
+    verify();
+  }, [verificationToken, navigate]);
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center px-4" style={{ fontFamily: 'Inter, sans-serif' }}>
+      <div className="max-w-lg w-full bg-white border border-[#e2e8f0] p-8 rounded-lg shadow-lg text-center">
+        <h1 className="text-2xl font-bold mb-4" style={{ fontFamily: 'Merriweather, serif', color: '#1e2937' }}>
+          Email Verification
+        </h1>
+        <p className={`text-sm ${status === 'success' ? 'text-green-600' : 'text-[#475569]'}`}>
+          {message}
+        </p>
+        {status === 'error' && (
+          <button
+            type="button"
+            onClick={() => navigate('/login')}
+            className="mt-6 px-6 py-3 bg-[#7B1A1A] text-white rounded-lg hover:bg-[#5A1313] transition-all"
+          >
+            Back to Login
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
   const [verificationToken, setVerificationToken] = useState('');
@@ -100,10 +181,10 @@ export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-4 z-50">
-      <div className="max-w-md w-full bg-white border border-[rgba(0,0,0,0.1)] p-8" style={{ borderRadius: '0px' }}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center px-4 z-50">
+      <div className="max-w-md w-full bg-white border border-[#e2e8f0] p-8">
         <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 bg-[#7B1A1A] bg-opacity-10 rounded-full flex items-center justify-center">
+          <div className="w-16 h-16 bg-red-50 flex items-center justify-center">
             <svg className="w-8 h-8 text-[#7B1A1A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
@@ -124,7 +205,7 @@ export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
 
         {/* Timer always shows when modal is open and timeRemaining > 0 */}
         {timeRemaining > 0 && (
-          <div className="mb-4 p-2 bg-gray-50 border border-gray-200">
+          <div className="mb-4 p-2 bg-slate-50 border border-slate-200">
             <p className="text-xs text-center text-[#6B7280] m-0">
               Code expires in: <span className="font-bold text-[#7B1A1A]">{formatTime(timeRemaining)}</span>
             </p>
@@ -132,14 +213,14 @@ export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
         )}
 
         {resendMessage && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-500">
-            <p className="text-xs text-green-600 m-0 text-center">{resendMessage}</p>
+          <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200">
+            <p className="text-xs text-emerald-700 m-0 text-center">{resendMessage}</p>
           </div>
         )}
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-[#FF5733]">
-            <p className="text-xs text-[#FF5733] m-0 text-center">{error}</p>
+          <div className="mb-4 p-3 bg-red-50 border border-red-200">
+            <p className="text-xs text-red-700 m-0 text-center">{error}</p>
           </div>
         )}
 
@@ -153,8 +234,7 @@ export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
               value={verificationToken}
               onChange={(e) => setVerificationToken(e.target.value)}
               placeholder="Enter verification code"
-              className="w-full px-4 py-3 border border-[rgba(0,0,0,0.1)] bg-white text-[#1F2937] text-center text-lg tracking-wider focus:outline-none focus:border-[#7B1A1A] focus:ring-0"
-              style={{ borderRadius: '0px' }}
+              className="w-full px-4 py-3 border border-[#e2e8f0] bg-white text-[#1F2937] text-center text-lg tracking-wider focus:outline-none focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7] transition-all"
               required
               autoComplete="one-time-code"
               autoFocus
@@ -165,7 +245,7 @@ export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
             type="submit"
             disabled={isVerifying}
             className="w-full bg-[#7B1A1A] text-white py-3 hover:bg-[#5A1313] transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-3"
-            style={{ borderRadius: '0px', border: 'none' }}
+            style={{ border: 'none' }}
           >
             {isVerifying ? 'Verifying...' : 'Verify Email'}
           </button>
@@ -174,8 +254,8 @@ export default function VerifyEmailModal({ email, isOpen, onClose, onSuccess}) {
             type="button"
             onClick={handleResendCode}
             disabled={resendLoading || timeRemaining > 0}
-            className="w-full bg-white text-[#7B1A1A] border-2 border-[#7B1A1A] py-3 hover:bg-[#7B1A1A] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ borderRadius: '0px' }}
+            className="w-full bg-white text-[#7B1A1A] border border-[#7B1A1A] py-3 hover:bg-[#7B1A1A] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ border: '1px solid #7B1A1A' }}
           >
             {resendLoading 
               ? 'Sending...' 

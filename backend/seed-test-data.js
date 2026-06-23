@@ -14,7 +14,7 @@ async function seedTestData() {
     const db = client.db(DB_NAME);
     
     // Step 1: Create test resident user
-    const residentEmail = 'john.resident@mak.ac.ug';
+    const residentEmail = 'john.resident@gmail.com';
     const usersCollection = db.collection('users');
     let resident = await usersCollection.findOne({ email: residentEmail });
 
@@ -36,7 +36,7 @@ async function seedTestData() {
       });
       
       resident = await usersCollection.findOne({ _id: result.insertedId });
-      console.log('✓ Created resident: john.resident@mak.ac.ug');
+      console.log('✓ Created resident: john.resident@gmail.com');
     } else {
       await usersCollection.updateOne(
         { _id: resident._id },
@@ -48,7 +48,7 @@ async function seedTestData() {
           } 
         }
       );
-      console.log('✓ Updated resident: john.resident@mak.ac.ug');
+      console.log('✓ Updated resident: john.resident@gmail.com');
     }
 
     // Step 2: Create test complaints
@@ -161,7 +161,7 @@ async function seedTestData() {
     console.log('\n✨ Test data seeding complete!');
     console.log('\n🚀 Next steps:');
     console.log('  1. Go to http://localhost:5173');
-    console.log('  2. Login as: admin@mak.ac.ug / Admin@123');
+    console.log('  2. Login as: john.resident@gmail.com / TestPass@123');
     console.log('  3. You should see 5 test complaints in the dashboard queue');
     console.log('  4. Try clicking on them and test the modals!\n');
     

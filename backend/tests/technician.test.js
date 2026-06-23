@@ -31,7 +31,7 @@ describe('Technician routes', () => {
     const hashedPassword = await bcrypt.hash('Password123!', 10);
     const userRes = await db.collection('users').insertOne({
       name: 'Tech User',
-      email: 'tech@mak.ac.ug',
+      email: 'tech@gmail.com',
       password: hashedPassword,
       role: 'Technician',
       isActive: true,

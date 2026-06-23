@@ -69,13 +69,14 @@ axiosInstance.interceptors.response.use(
     if (status === 429) {
       const maxRetries = config.__maxRetries ?? 3;
       config.__retryCount = config.__retryCount || 0;
+      config.__maxRetries = maxRetries;
 
       if (config.__retryCount < maxRetries) {
         config.__retryCount += 1;
         const delay = Math.min(2000, 300 * Math.pow(2, config.__retryCount));
 
         return new Promise((resolve) => setTimeout(resolve, delay)).then(() =>
-          axios.request(config)
+          axiosInstance.request(config)
         );
       }
       // fall through to return formatted rate-limit error after retries exhausted
@@ -93,15 +94,17 @@ axiosInstance.interceptors.response.use(
         });
       
       case 401:
-        // Unauthorized - clear localStorage and redirect to login
+        // Unauthorized - clear auth storage and redirect to login
+        localStorage.removeItem('token');
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('tokenExpiry');
         localStorage.removeItem('user');
-        
+
         // Only redirect if not already on login page
         if (!window.location.pathname.includes('/login')) {
           window.location.href = '/login';
         }
-        
+
         return Promise.reject({
           type: 'UNAUTHORIZED',
           status: 401,

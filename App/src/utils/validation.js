@@ -1,6 +1,6 @@
 // frontend/src/utils/validation.js
 export const validateEmail = (email) => {
-  return email.endsWith('@mak.ac.ug') && email.includes('@');
+  return email.toLowerCase().endsWith('@gmail.com') && email.includes('@');
 };
 
 export const calculatePasswordStrength = (password) => {
@@ -51,7 +51,7 @@ export const validateRegistrationForm = (values) => {
   if (!values.email) {
     errors.email = 'Email is required';
   } else if (!validateEmail(values.email)) {
-    errors.email = 'Email must be a valid @mak.ac.ug address';
+    errors.email = 'Email must be a valid @gmail.com address';
   }
 
   if (!values.role) {
