@@ -1,0 +1,341 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { motion } from 'motion/react';
+import { toast } from 'sonner';
+import { BarChart3, ChevronLeft, Layers } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Card } from './ui/card.jsx';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs.jsx';
+import { ComplaintDetailDrawer } from './estates/ComplaintDetailDrawer';
+import Header from './Header';
+import StatsRow from './StatsRow';
+import QueueTab from './QueueTab';
+import AnalyticsTab from './AnalyticsTab';
+import managementService from '../services/managementApi';
+
+// ─── Status label map (short names for badges) ────────────────────────────────
+
+const STATUS_LABELS = {
+  pending: 'Pending',
+  triaged: 'Triaged',
+  analyzed: 'Analyzed',
+  scope_defined: 'Scoped',
+  assigned: 'Assigned',
+  'in-progress': 'In Progress',
+  rework_required: 'Rework',
+  escalated: 'Escalated',
+  closed: 'Closed',
+};
+
+function statusLabel(s) {
+  return STATUS_LABELS[s] ?? s.replace(/[_-]/g, ' ');
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// formatDate and slaLabel are implemented in table components
+
+// priority badge classes moved into table component
+
+const STATUS_BADGE = {
+  pending: 'bg-slate-100 text-slate-700 border-slate-300',
+  triaged: 'bg-blue-100 text-blue-700 border-blue-300',
+  analyzed: 'bg-sky-100 text-sky-700 border-sky-300',
+  scope_defined: 'bg-indigo-100 text-indigo-700 border-indigo-300',
+  assigned: 'bg-cyan-100 text-cyan-700 border-cyan-300',
+  'in-progress': 'bg-violet-100 text-violet-700 border-violet-300',
+  rework_required: 'bg-amber-100 text-amber-700 border-amber-300',
+  escalated: 'bg-orange-100 text-orange-800 border-orange-300',
+  closed: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+};
+
+const CATEGORIES = ['all', 'Electrical', 'Plumbing', 'Cleaning', 'Safety', 'Other'];
+const PRIORITIES = ['all', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+const STATUSES = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'triaged', label: 'Triaged' },
+  { value: 'scope_defined', label: 'Scoped' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'in-progress', label: 'In Progress' },
+  { value: 'rework_required', label: 'Rework' },
+  { value: 'escalated', label: 'Escalated' },
+  { value: 'closed', label: 'Closed' },
+];
+
+const LIMIT = 8;
+
+// Small UI helpers moved into subcomponents (StatRow, ComplaintTable, etc.)
+
+// ─── Analytics Tab ────────────────────────────────────────────────────────────
+
+// AnalyticsTab moved to separate file (AnalyticsTab.jsx)
+
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
+
+export default function EstatesOfficerDashboard() {
+  const navigate = useNavigate();
+  const [complaints, setComplaints] = useState([]);
+  const [stats, setStats] = useState({});
+  const [technicians, setTechnicians] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [queueError, setQueueError] = useState('');
+
+  // server-side pagination
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalComplaints, setTotalComplaints] = useState(0);
+
+  // filters
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+
+  const clearFilters = () => { setSearch(''); setStatusFilter('all'); setPriorityFilter('all'); setCategoryFilter('all'); };
+
+  // drawer
+  const [selected, setSelected] = useState(null);
+
+  // Ref guards for debounce and mount state
+  const debounceRef = useRef(null);
+
+  // ── Fetch helper (stable across renders) ────────────────────────────────────────
+
+  const fetchQueueData = useCallback(async (pageNum, filters) => {
+    setLoading(true);
+    try {
+      const res = await managementService.getQueue({
+        status: filters.statusFilter,
+        priority: filters.priorityFilter,
+        category: filters.categoryFilter !== 'all' ? filters.categoryFilter : undefined,
+        search: filters.search || undefined,
+        page: pageNum,
+        limit: LIMIT,
+      });
+
+      const queueData = Array.isArray(res.data?.data)
+        ? res.data.data
+        : Array.isArray(res.data)
+          ? res.data
+          : [];
+
+      if (res.success) {
+        setComplaints(queueData);
+        setTotalPages(res.pagination?.totalPages ?? 1);
+        setTotalComplaints(res.pagination?.totalComplaints ?? queueData.length);
+        setQueueError('');
+      } else {
+        const message = res.error || 'Unable to fetch management queue';
+        console.error('Management queue API returned failure:', message, res.type, res.status, res);
+        setQueueError(`${res.type || 'ERROR'}: ${message}`);
+        setComplaints([]);
+        setTotalPages(1);
+        setTotalComplaints(0);
+      }
+    } catch (error) {
+      const message = error?.message || 'Failed to load management queue';
+      console.error('Failed to load management queue:', error);
+      toast.error(message);
+      setQueueError(message);
+      setComplaints([]);
+      setTotalPages(1);
+      setTotalComplaints(0);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchTechsData = useCallback(async (category = null) => {
+    try {
+      const techRes = await managementService.getTechnicians(category);
+      const normalizeTech = (t) => ({
+        _id: t._id || t.id || null,
+        name: t.name || t.fullName || t.user?.name || '',
+        email: t.email || '',
+        phone: t.phone || t.phoneNumber || '',
+        role: t.role || '',
+        specialization: t.specialization || t.trade || '',
+        trade: t.trade || t.specialization || '',
+        zone: t.zone || '',
+        avatar: t.avatar || null,
+        ...t,
+      });
+
+      if (techRes.success && Array.isArray(techRes.data?.data)) {
+        setTechnicians(techRes.data.data.map(normalizeTech));
+      } else if (techRes.success && Array.isArray(techRes.data)) {
+        setTechnicians(techRes.data.map(normalizeTech));
+      } else {
+        setTechnicians([]);
+      }
+    } catch (error) {
+      console.error('Failed to load technicians:', error);
+      setTechnicians([]);
+    }
+  }, []);
+
+  // ── Initial load + stats/technicians ──────────────────────────────────────────
+
+  useEffect(() => {
+    // The effect should only run once on mount. filter state changes are handled by other effects.
+    let isMounted = true;
+
+    const initLoad = async () => {
+      // Fetch stats
+      const statsRes = await managementService.getDashboardStats();
+      if (isMounted) {
+        setStats(statsRes.success && statsRes.data ? statsRes.data : {});
+      }
+
+      // Fetch technicians
+      await fetchTechsData(categoryFilter !== 'all' ? categoryFilter : null);
+
+      // Fetch queue with current filters (page 1)
+      if (isMounted) {
+        await fetchQueueData(1, { statusFilter, priorityFilter, categoryFilter, search });
+      }
+    };
+
+    initLoad();
+    return () => { isMounted = false; };
+  }, [fetchQueueData, fetchTechsData, statusFilter, priorityFilter, categoryFilter, search]); // Only run once on mount
+
+  // ── Refetch technicians when category changes ──────────────────────────────────
+
+  useEffect(() => {
+    // This effect intentionally triggers a fetch when the selected category changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchTechsData(categoryFilter !== 'all' ? categoryFilter : null);
+  }, [categoryFilter, fetchTechsData]);
+
+  // ── Reset page to 1 and fetch when filters change (debounced) ────────────────────
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    
+    debounceRef.current = setTimeout(() => {
+      setPage(1);
+      // Fetch directly here with current filters to avoid race conditions
+      fetchQueueData(1, { statusFilter, priorityFilter, categoryFilter, search });
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [search, statusFilter, priorityFilter, categoryFilter, fetchQueueData]);
+
+  // ── Fetch queue data only when page changes (no filter debounce for direct page nav) ────
+
+  useEffect(() => {
+    if (page === 1) return; // Skip: already handled by filter effect or initial load
+    
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchQueueData(page, { statusFilter, priorityFilter, categoryFilter, search });
+  }, [page, statusFilter, priorityFilter, categoryFilter, search, fetchQueueData]);
+
+  // ── Refresh queue when an external task or workflow event occurs ──────────
+  useEffect(() => {
+    const handleQueueUpdated = () => {
+      fetchQueueData(page, { statusFilter, priorityFilter, categoryFilter, search });
+      managementService.getDashboardStats().then((r) => {
+        if (r.success) setStats(r.data);
+      });
+    };
+
+    const handleStorageEvent = (event) => {
+      if (event.key !== 'app-event' || !event.newValue) return;
+      try {
+        const payload = JSON.parse(event.newValue);
+        if (payload?.eventName === 'queueUpdated') {
+          handleQueueUpdated();
+        }
+      } catch (error) {
+        console.warn('Invalid app-event payload', error);
+      }
+    };
+
+    window.addEventListener('queueUpdated', handleQueueUpdated);
+    window.addEventListener('storage', handleStorageEvent);
+
+    return () => {
+      window.removeEventListener('queueUpdated', handleQueueUpdated);
+      window.removeEventListener('storage', handleStorageEvent);
+    };
+  }, [fetchQueueData, page, statusFilter, priorityFilter, categoryFilter, search]);
+
+  // ── handle complaint update from drawer ────────────────────────────────────
+
+  const handleRefresh = useCallback((_id, updated) => {
+    setComplaints((prev) => prev.map((c) => (c._id === updated._id ? updated : c)));
+    setSelected(updated);
+    // Refresh stats after state change
+    managementService.getDashboardStats().then((r) => { if (r.success) setStats(r.data); });
+  }, []);
+
+  // const handleLogout = () => authService.logoutAndRedirect?.(); // not used
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* ── Shared Header ── */}
+      <Header onHamburgerClick={() => {}} />
+
+      <main className="max-w-screen-2xl mx-auto px-4 md:px-6 py-5">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+          <h1 className="text-[#1e2937] mb-2" style={{ fontFamily: 'Merriweather, serif', fontSize: '24px', fontWeight: 700 }}>
+            Management Queue
+          </h1>
+          <p className="text-[#475569]" style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px' }}>
+            Oversee complaints and workflow
+          </p>
+        </motion.div>
+        <StatsRow stats={stats} />
+
+        {/* ── Tabs ── */}
+        <Tabs defaultValue="queue">
+          <div className="flex items-center justify-between mb-3 gap-3">
+            <TabsList className="bg-white border border-slate-200 shadow-none rounded-none h-9 shrink-0">
+              <TabsTrigger value="queue" className="data-[state=active]:bg-[#1e3a5f] data-[state=active]:text-white h-7 px-4 text-sm rounded-none">
+                <Layers className="h-3.5 w-3.5 mr-1.5" />Queue
+              </TabsTrigger>
+              <TabsTrigger value="analytics" className="data-[state=active]:bg-[#1e3a5f] data-[state=active]:text-white h-7 px-4 text-sm rounded-none">
+                <BarChart3 className="h-3.5 w-3.5 mr-1.5" />Analytics
+              </TabsTrigger>
+            </TabsList>
+            <span className="text-xs text-slate-400 shrink-0">{totalComplaints} total</span>
+          </div>
+
+          <TabsContent value="queue" className="m-0">
+              <QueueTab
+              search={search} setSearch={setSearch}
+              statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+              priorityFilter={priorityFilter} setPriorityFilter={setPriorityFilter}
+              categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter}
+              STATUSES={STATUSES} PRIO_OPTIONS={PRIORITIES} CATEGORIES={CATEGORIES}
+              clearFilters={clearFilters}
+              queueError={queueError}
+              complaints={complaints} loading={loading} onRowClick={setSelected}
+              page={page} setPage={setPage} totalPages={totalPages} totalComplaints={totalComplaints}
+              STATUS_BADGE={STATUS_BADGE} statusLabel={statusLabel}
+            />
+          </TabsContent>
+
+          <TabsContent value="analytics" className="m-0">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+              <Card className="border-slate-200 shadow-none rounded-none">
+                <AnalyticsTab stats={stats} complaints={complaints} />
+              </Card>
+            </motion.div>
+          </TabsContent>
+        </Tabs>
+      </main>
+
+      {/* Detail Drawer */}
+      <ComplaintDetailDrawer
+        complaint={selected}
+        technicians={technicians}
+        onClose={() => setSelected(null)}
+        onRefresh={handleRefresh}
+      />
+    </div>
+  );
+}
