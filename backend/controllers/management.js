@@ -173,18 +173,18 @@ export const defineScopeComplaint = async (req, res) => {
       dependencies,
     } = req.body;
 
-    console.log('🔵 [DEFINE SCOPE]', complaintId);
+    console.log('🔵 [DEFINE SCOPE] Started with complaint:', complaintId);
 
     // Check permission
     const allowedRoles = ['admin', 'estates_officer'];
     if (!allowedRoles.includes(userRole)) {
       return res.status(403).json({
         success: false,
-        message: 'You do not have permission to define complaint scope',
+        message: 'Permission denied',
       });
     }
 
-    // Validate MongoDB ObjectId (from URL parameter)
+    // Validate MongoDB ObjectId
     if (!ObjectId.isValid(complaintId)) {
       return res.status(400).json({
         success: false,
@@ -208,22 +208,23 @@ export const defineScopeComplaint = async (req, res) => {
     if (!complaint) {
       return res.status(404).json({
         success: false,
-        message: 'Complaint not found or cannot be scoped',
+        message: 'Complaint not found',
       });
     }
 
-    console.log('✅ [DEFINE SCOPE] Scoped:', complaintId);
+    console.log('✅ [DEFINE SCOPE] Completed successfully');
 
     res.status(200).json({
       success: true,
-      message: 'Complaint scope defined successfully',
+      message: 'Scope defined successfully',
       data: complaint,
     });
   } catch (error) {
-    console.error('Define scope error:', error);
+    console.error('❌ [DEFINE SCOPE] ERROR:', error);
+    console.error('Stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Server error while defining complaint scope',
+      message: error.message || 'Internal server error',
     });
   }
 };

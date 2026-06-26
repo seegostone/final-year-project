@@ -667,28 +667,28 @@ export const complaintOperations = {
       attachments,
       hasAttachment: attachments.length > 0,
       imageData: complaintData.imageData || null,
-      
+
       // Workflow fields
       priority: null,
       slaDeadline: null,
-      
+
       // Assignment fields
       assignedTo: null,
       assignedAt: null,
       assignment: null,  // { technicianId, technicianName, assignedAt, confirmed }
-      
+
       // Resolution fields
       resolvedAt: null,
       resolutionNotes: null,
       closedAt: null,
       closedBy: null,
-      
+
       // Scope definition
       scopeDefinition: null,  // { description, estimatedDuration, requiredSkills, estimatedCost, dependencies }
-      
+
       // Tasks array (for work breakdown)
       tasks: [],
-      
+
       // Resident validation / Approval workflow
       residentValidation: {
         requestedAt: null,
@@ -702,26 +702,26 @@ export const complaintOperations = {
         satisfactionRating: null,
         rejectionReason: null,
       },
-      
+
       // Quality check
       qualityCheck: null,  // { checkedBy, checkedAt, status, notes, photos }
-      
+
       // Escalation
       escalation: null,  // { status, escalatedTo, escalatedAt, reason }
-      
+
       // Rework tracking
       reworkCount: 0,
       reworkHistory: [],
-      
+
       // Closure report
       closureReport: null,  // { summary, preventiveRecommendations, costActual, timeToResolve }
-      
+
       // Performance metrics
       metrics: {
         slaMetCompliance: null,
         totalHandlingTime: null,
       },
-      
+
       // History log
       history: [
         buildHistoryEntry({
@@ -734,7 +734,7 @@ export const complaintOperations = {
           note: 'Complaint submitted',
         }),
       ],
-      
+
       // Timestamps
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -1200,8 +1200,8 @@ export const managementOperations = {
     // After updating task, check if ALL tasks are now done
     const updatedComplaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
     if (statusData.status === 'done' && updatedComplaint?.tasks) {
-      const allTasksDone = updatedComplaint.tasks.length > 0 && 
-                          updatedComplaint.tasks.every(t => t.status === 'done');
+      const allTasksDone = updatedComplaint.tasks.length > 0 &&
+        updatedComplaint.tasks.every(t => t.status === 'done');
 
       // If all tasks are done and complaint is not already resolved/closed, auto-transition to resolved
       if (allTasksDone && !['resolved', 'closed', 'validated', 'rework_required'].includes(updatedComplaint.status)) {
@@ -1218,7 +1218,7 @@ export const managementOperations = {
         await complaints.updateOne(
           { _id: new ObjectId(complaintId) },
           {
-            $set: { 
+            $set: {
               status: 'resolved',
               resolvedAt: new Date(),
               updatedAt: new Date(),
@@ -1307,59 +1307,67 @@ export const managementOperations = {
   async defineScopeComplaint(db, complaintId, scopeData) {
     const complaints = db.collection('complaints');
 
-    // Query by MongoDB _id (ObjectId)
+    // Find the complaint
     const complaint = await complaints.findOne({
       _id: new ObjectId(complaintId),
     });
     if (!complaint) return null;
 
-    // Do not overwrite existing scope definition or estimated duration
-    const updateFields = { updatedAt: new Date() };
+    console.log('📋 [defineScopeComplaint] Found complaint:', complaint.complaintId);
 
-    if (!complaint.scopeDefinition?.description && scopeData.scopeDescription) {
-      updateFields['scopeDefinition.description'] = scopeData.scopeDescription;
-    }
+    // Build the complete scopeDefinition object
+    // Start with existing definition or empty object
+    const existingScope = complaint.scopeDefinition || {};
 
-    if (!complaint.scopeDefinition?.estimatedDuration) {
-      updateFields['scopeDefinition.estimatedDuration'] = Number.isFinite(Number(scopeData.estimatedDuration))
-        ? Math.ceil(Number(scopeData.estimatedDuration))
-        : 2;
-    }
+    const newScopeDefinition = {
+      description: existingScope.description || scopeData.scopeDescription || '',
+      estimatedDuration: existingScope.estimatedDuration || (
+        scopeData.estimatedDuration
+          ? (Number.isFinite(Number(scopeData.estimatedDuration))
+            ? Math.ceil(Number(scopeData.estimatedDuration))
+            : 2)
+          : 2
+      ),
+      requiredSkills: existingScope.requiredSkills || scopeData.requiredSkills || [],
+      estimatedCost: existingScope.estimatedCost !== undefined
+        ? existingScope.estimatedCost
+        : (scopeData.estimatedCost !== undefined
+          ? (Number.isFinite(Number(scopeData.estimatedCost))
+            ? Number(scopeData.estimatedCost)
+            : 0)
+          : 0),
+    };
 
-    if (!complaint.scopeDefinition?.requiredSkills) {
-      updateFields['scopeDefinition.requiredSkills'] = scopeData.requiredSkills || [];
-    }
+    console.log('📝 [defineScopeComplaint] New scope definition:', newScopeDefinition);
 
-    if (!complaint.scopeDefinition?.estimatedCost) {
-      updateFields['scopeDefinition.estimatedCost'] = scopeData.estimatedCost || 0;
-    }
+    // Build update object - only parent paths, no dot notation
+    const updateFields = {
+      scopeDefinition: newScopeDefinition,
+      updatedAt: new Date(),
+    };
 
-    if (!complaint.scopeDefinition?.dependencies) {
-      updateFields['scopeDefinition.dependencies'] = scopeData.dependencies?.map((id) => new ObjectId(id)) || [];
-    }
-
-    // Only advance status to 'scope_defined' if complaint is at or before 'triaged'
-    const promotableStatuses = ['pending', 'triaged'];
-    if (promotableStatuses.includes(complaint.status)) {
+    // Update status if complaint is at right stage
+    if (complaint.status === 'pending' || complaint.status === 'triaged') {
       updateFields.status = 'scope_defined';
     }
 
-    // If nothing meaningful would be changed, return the complaint unchanged
-    const meaningfulKeys = Object.keys(updateFields).filter((k) => k !== 'updatedAt');
-    if (meaningfulKeys.length === 0) {
-      return complaint;
-    }
+    console.log('📝 [defineScopeComplaint] Update fields:', updateFields);
 
-    const historyEntry = buildHistoryEntry({
+    // Create history entry
+    const historyEntry = {
       action: 'scope_defined',
       from: complaint.status,
       to: updateFields.status || complaint.status,
-      by: scopeData.definedBy,
+      by: new ObjectId(scopeData.definedBy),
       byName: 'Estates Officer',
       byRole: 'estates_officer',
-      note: `Scope: ${updateFields['scopeDefinition.description'] || complaint.scopeDefinition?.description || ''}`,
-    });
+      at: new Date(),
+      note: scopeData.scopeDescription ? scopeData.scopeDescription.substring(0, 100) : 'Scope defined',
+    };
 
+    console.log('📋 [defineScopeComplaint] History entry:', historyEntry);
+
+    // Update the complaint
     const result = await complaints.updateOne(
       { _id: new ObjectId(complaintId) },
       {
@@ -1368,9 +1376,17 @@ export const managementOperations = {
       }
     );
 
-    if (result.modifiedCount === 0) return null;
+    console.log('✅ [defineScopeComplaint] Update result:', result.modifiedCount, 'documents modified');
 
-    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+    if (result.modifiedCount === 0) {
+      console.log('⚠️  [defineScopeComplaint] No documents were modified');
+      return complaint;
+    }
+
+    // Fetch and return the updated complaint
+    const updatedComplaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
+    console.log('✅ [defineScopeComplaint] Updated scope:', updatedComplaint?.scopeDefinition);
+    return updatedComplaint;
   },
 
   // Assign a technician to a specific task inside a complaint

@@ -146,20 +146,63 @@ export function DefineScopeModal({ open, complaint, onClose, onSubmit }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Reset form when modal opens/closes
+  const handleOpenChange = (isOpen) => {
+    if (!isOpen) {
+      setScopeDescription('');
+      setEstimatedDuration('');
+      setRequiredSkills('');
+      setEstimatedCost('');
+      setError(null);
+      onClose();
+    }
+  };
+
   const handleSubmit = async () => {
-      if (!scopeDescription.trim() || !estimatedDuration || parseInt(estimatedDuration, 10) <= 0) {
+    if (!scopeDescription.trim() || !estimatedDuration || parseInt(estimatedDuration, 10) <= 0) {
       setError('Scope description and estimated duration are required.');
       return;
     }
     setLoading(true);
     setError(null);
-      try {
-      await onSubmit(complaint._id, {
+    try {
+      // Parse required skills from comma-separated string to array
+      const skillsArray = requiredSkills
+        .split(',')
+        .map(skill => skill.trim())
+        .filter(skill => skill.length > 0);
+
+      const submitData = {
         scopeDescription: scopeDescription.trim(),
         estimatedDuration: parseInt(estimatedDuration, 10),
+        estimatedCost: estimatedCost ? parseFloat(estimatedCost) : undefined,
+        requiredSkills: skillsArray.length > 0 ? skillsArray : undefined,
+      };
+
+      console.log('📤 [DefineScopeModal] Form validation passed');
+      console.log('📤 [DefineScopeModal] Complaint ID:', complaint._id);
+      console.log('📤 [DefineScopeModal] Submitting data:', {
+        scopeDescription: submitData.scopeDescription.substring(0, 50) + '...',
+        estimatedDuration: submitData.estimatedDuration,
+        estimatedDurationType: typeof submitData.estimatedDuration,
+        estimatedCost: submitData.estimatedCost,
+        estimatedCostType: typeof submitData.estimatedCost,
+        requiredSkills: submitData.requiredSkills,
       });
+      
+      console.log('📤 [DefineScopeModal] Full data to submit:', submitData);
+      await onSubmit(complaint._id, submitData);
+      
+      // Reset form after successful submission
+      setScopeDescription('');
+      setEstimatedDuration('');
+      setRequiredSkills('');
+      setEstimatedCost('');
+      setError(null);
+      
       onClose();
-    } catch {
+    } catch (err) {
+      console.error('❌ [DefineScopeModal] Error submitting:', err);
       setError('Failed to define scope. Please try again.');
     } finally {
       setLoading(false);
@@ -167,7 +210,7 @@ export function DefineScopeModal({ open, complaint, onClose, onSubmit }) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg bg-white border border-slate-200">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-blue-600">

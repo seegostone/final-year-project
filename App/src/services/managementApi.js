@@ -196,25 +196,73 @@ const managementService = {
   // Define scope
   async defineScopeComplaint(complaintId, data) {
     try {
+      console.log('📤 [DEFINE SCOPE API] Sending request:', {
+        complaintId,
+        data,
+        endpoint: `/management/${complaintId}/scope`,
+      });
+      
       const response = await axiosInstance.post(
         `/management/${complaintId}/scope`,
         data
       );
 
+      console.log('📥 [DEFINE SCOPE API] Success response:', response.data || response);
       return {
         success: true,
         data: response.data || response,
-        message: response.message,
+        message: response.data?.message || response.message,
       };
     } catch (error) {
-      console.error('Define scope error:', error);
+      console.error('❌ [DEFINE SCOPE API] Error caught:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+      });
+      console.error('❌ [DEFINE SCOPE API] Error response data:', error.response?.data);
+      console.error('❌ [DEFINE SCOPE API] Error response status:', error.response?.status);
+      console.error('❌ [DEFINE SCOPE API] Full error object:', error);
+      
+      // Handle different error scenarios
+      let errorMessage = 'Failed to define scope';
+      let errorType = 'UNKNOWN_ERROR';
+      let httpStatus = 500;
+
+      if (error.response) {
+        // Server responded with error status
+        httpStatus = error.response.status;
+        errorMessage = error.response.data?.message || 
+                      error.response.data?.error || 
+                      error.response.statusText ||
+                      'Server error while defining scope';
+        errorType = error.response.data?.type || 'SERVER_ERROR';
+        console.error('📋 [DEFINE SCOPE API] Server error response:', {
+          status: httpStatus,
+          message: errorMessage,
+          type: errorType,
+          data: error.response.data,
+        });
+      } else if (error.request) {
+        // Request made but no response
+        errorMessage = 'No response from server. Please check your connection.';
+        errorType = 'NO_RESPONSE';
+        console.error('📋 [DEFINE SCOPE API] No server response:', error.request);
+      } else {
+        // Error during request setup
+        errorMessage = error.message || 'Failed to send request';
+        errorType = 'REQUEST_SETUP_ERROR';
+      }
+
       const formattedError = handleApiError(error);
+      
       return {
         success: false,
-        error: formattedError.message,
-        type: formattedError.type,
-        status: error.status || 500,
+        error: errorMessage,
+        type: errorType,
+        status: httpStatus,
         validationErrors: formattedError.validationErrors,
+        serverDetails: error.response?.data?.stack || error.response?.data?.details,
+        serverResponse: error.response?.data,
       };
     }
   },

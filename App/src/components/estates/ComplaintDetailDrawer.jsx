@@ -106,15 +106,22 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
   const [feedbackSuccess, setFeedbackSuccess] = useState(null);
 
   const refreshComplaintData = useCallback(async () => {
-    if (!complaint || !complaint._id) return null;
+    if (!complaint || !complaint._id) {
+      console.warn('⚠️ [refreshComplaintData] No complaint or _id available');
+      return null;
+    }
     try {
+      console.log('🔄 [refreshComplaintData] Fetching latest complaint data...');
       const res = await complaintService.getComplaintById(complaint._id);
       if (res.success && res.data) {
+        console.log('✅ [refreshComplaintData] Got updated complaint:', res.data.scopeDefinition);
         onRefresh(complaint._id, res.data);
         return res.data;
+      } else {
+        console.error('❌ [refreshComplaintData] API returned error:', res.error);
       }
     } catch (err) {
-      console.error('Failed to refresh complaint:', err);
+      console.error('❌ [refreshComplaintData] Exception:', err);
     }
     return null;
   }, [complaint, onRefresh]);
@@ -167,17 +174,28 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
           onSuccess(res.data);
         }
         await refreshComplaintData();
+        setApiError(null); // Ensure error is cleared on success
         return res;
       }
+      
+      // Handle API error response
+      const errorMessage = res.error || res.message || 'Action could not be completed. Please try again.';
+      console.error('❌ [callApi] API returned error:', errorMessage);
+      console.error('📋 [callApi] Full error response:', res);
+      
+      setApiError(errorMessage);
+      
+      // Still apply optimistic update if provided (for non-fatal errors)
       if (typeof optimisticUpdate === 'function') {
         const optimistic = optimisticUpdate(res.data ?? {});
         onRefresh(complaint._id, optimistic);
       }
       return res;
     } catch (err) {
-      console.error('API call failed:', err);
-      setApiError('Action could not be completed. Please try again.');
-      return { success: false };
+      console.error('❌ [callApi] Exception thrown:', err);
+      const errorMessage = err.message || 'Action could not be completed. Please try again.';
+      setApiError(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
       setActionLoading(false);
     }
@@ -227,24 +245,31 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
   };
 
   const handleDefineScope = async (_id, data) => {
-    await callApi(
-      () => managementService.defineScopeComplaint(_id, {
-        scopeDescription: data.scopeDescription,
-        estimatedDuration: data.estimatedDuration,
-        requiredSkills: data.requiredSkills,
-        estimatedCost: data.estimatedCost,
-      }),
-      () => ({
-        ...complaint,
-        status: 'scope_defined',
-        scopeDefinition: {
-          description: data.scopeDescription,
-          estimatedDuration: data.estimatedDuration,
-          requiredSkills: data.requiredSkills,
-          estimatedCost: data.estimatedCost,
-        },
-      })
+    const payload = {
+      scopeDescription: data.scopeDescription,
+      estimatedDuration: data.estimatedDuration,
+    };
+
+    // Add optional fields if they exist
+    if (data.estimatedCost !== undefined) {
+      payload.estimatedCost = data.estimatedCost;
+    }
+    if (data.requiredSkills !== undefined) {
+      payload.requiredSkills = data.requiredSkills;
+    }
+
+    console.log('📤 [handleDefineScope] Sending payload:', payload);
+    
+    const res = await callApi(
+      () => managementService.defineScopeComplaint(_id, payload),
+      null // no optimistic update - let server data be the source of truth
     );
+
+    if (res.success) {
+      console.log('✅ [handleDefineScope] Scope defined successfully');
+    } else {
+      console.error('❌ [handleDefineScope] Failed to define scope:', res.error);
+    }
   };
 
   const handleCreateTask = async (_id, data) => {
@@ -538,7 +563,7 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                       <p className="text-sm text-slate-700">{complaint.scopeDefinition.description}</p>
                       <div className="flex flex-wrap gap-3 text-xs">
                         <span className="text-indigo-700 font-medium">⏱ {complaint.scopeDefinition.estimatedDuration} days total</span>
-                        <span className="text-indigo-700 font-medium">💰 UGX {complaint.scopeDefinition.estimatedCost.toLocaleString()}</span>
+                        <span className="text-indigo-700 font-medium">💰 UGX {complaint?.scopeDefinition?.estimatedCost ? complaint?.scopeDefinition?.estimatedCost.toLocaleString() : 'N/A' }</span>
                       </div>
                       {complaint.scopeDefinition.requiredSkills.length > 0 && (
                         <div className="flex flex-wrap gap-1">
