@@ -100,3 +100,5 @@ Desktop.ini
 uploads/
 #.md
 .md 
+node_modules/
+
