@@ -3,6 +3,7 @@ import { body, param } from 'express-validator';
 import { ObjectId } from 'mongodb';
 import { validationResult } from 'express-validator';
 import { protect } from '../middleware/auth.js';
+import emailService from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -359,7 +360,10 @@ router.patch(
       };
 
       const result = await complaints.updateOne(
-        { _id: new ObjectId(complaintId), 'tasks._id': new ObjectId(taskId) },
+        {
+          ...complaintQuery,
+          'tasks._id': new ObjectId(taskId),
+        },
         {
           $set: updateFields,
           $push: { 'tasks.$.activityLog': activityEntry },
@@ -374,13 +378,59 @@ router.patch(
       }
 
       // Fetch updated complaint to return updated task
-      const updatedComplaint = await complaints.findOne({
-        _id: new ObjectId(complaintId),
-      });
+      const updatedComplaint = await complaints.findOne(complaintQuery);
 
       const updatedTask = (updatedComplaint.tasks || []).find(
         (t) => t._id.toString() === taskId
       );
+
+      if (status === 'done') {
+        try {
+          const officers = await db.collection('users')
+            .find({ role: { $in: ['estates_officer', 'admin'] }, isActive: true })
+            .toArray();
+
+          await Promise.allSettled(
+            officers.map(async (officer) => {
+              await db.collection('users').updateOne(
+                { _id: officer._id },
+                {
+                  $push: {
+                    notifications: {
+                      $each: [
+                        {
+                          _id: new ObjectId(),
+                          type: 'task_completed',
+                          title: 'Technician completed a task',
+                          message: `Technician completed task "${task.title}" for complaint ${complaint.complaintId || complaint._id.toString()}.`,
+                          complaintId: complaint._id.toString(),
+                          taskId,
+                          route: '/management/queue',
+                          isRead: false,
+                          createdAt: new Date(),
+                        },
+                      ],
+                      $position: 0,
+                    },
+                  },
+                  $set: { updatedAt: new Date() },
+                }
+              );
+
+              if (officer.email) {
+                await emailService.sendNotificationEmail(
+                  officer.email,
+                  'Technician completed a task',
+                  `A technician has completed task "${task.title}" for complaint ${complaint.complaintId || complaint._id.toString()}.`,
+                  { route: '/management/queue' }
+                );
+              }
+            })
+          );
+        } catch (notifyError) {
+          console.warn('Task completion notification failed:', notifyError);
+        }
+      }
 
       res.status(200).json({
         success: true,

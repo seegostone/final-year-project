@@ -12,7 +12,7 @@ function PaginationControls({ page, setPage, totalPages, totalComplaints, loadin
         </Button>
         <div className="flex items-center gap-1">
           {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((n) => (
-            <button key={n} onClick={() => setPage(n)} disabled={loading} className={`h-7 w-7 text-xs rounded-md transition-colors ${n === page ? 'bg-[#1e3a5f] text-white font-semibold' : 'text-slate-500 hover:bg-slate-100'}`}>{n}</button>
+            <button key={n} onClick={() => setPage(n)} disabled={loading} className={`h-7 w-7 text-xs rounded-none transition-colors ${n === page ? 'bg-[#1e3a5f] text-white font-semibold' : 'text-slate-500 hover:bg-slate-100'}`}>{n}</button>
           ))}
           {totalPages > 7 && <span className="text-xs text-slate-400 px-1">…{totalPages}</span>}
         </div>

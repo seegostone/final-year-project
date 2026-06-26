@@ -20,7 +20,7 @@ function PriorityBadge({ priority }) {
 
 function StatusBadge({ status, STATUS_BADGE, statusLabel }) {
   return (
-    <span className={`inline-block text-xs px-2 py-0.5 rounded-full border font-medium whitespace-nowrap leading-tight ${STATUS_BADGE[status] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+    <span className={`inline-block text-xs px-2 py-0.5 rounded-none border font-medium whitespace-nowrap leading-tight ${STATUS_BADGE[status] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
       {statusLabel(status)}
     </span>
   );
@@ -36,13 +36,13 @@ function slaLabel(iso) {
   if (diff < 0) return { label: `${Math.abs(diff).toFixed(0)}h overdue`, cls: 'text-rose-600 font-semibold' };
   if (diff < 6) return { label: `${diff.toFixed(0)}h left`, cls: 'text-orange-500 font-semibold' };
   if (diff < 24) return { label: `${diff.toFixed(0)}h left`, cls: 'text-amber-600' };
-  return { label: `${(diff / 24).toFixed(1)}d left`, cls: 'text-slate-500' };
+  return { label: `${Math.ceil(diff / 24)}d left`, cls: 'text-slate-500' };
 }
 
 function ComplaintTable({ complaints = [], loading, onRowClick, STATUS_BADGE, statusLabel }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b border-slate-100 bg-slate-50/70">
             {[
@@ -93,7 +93,7 @@ function ComplaintTable({ complaints = [], loading, onRowClick, STATUS_BADGE, st
                     </div>
                   </td>
                   <td className="px-4 py-3"><p className="text-xs text-slate-600 line-clamp-1 max-w-[130px]">{c.user?.name ?? (c.history?.find((h) => h.action === 'submitted')?.byName) ?? '—'}</p></td>
-                  <td className="px-4 py-3"><span className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded px-2 py-0.5 whitespace-nowrap">{c.category}</span></td>
+                  <td className="px-4 py-3"><span className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded-none px-2 py-0.5 whitespace-nowrap">{c.category}</span></td>
                   <td className="px-4 py-3"><PriorityBadge priority={c.priority} /></td>
                   <td className="px-4 py-3"><StatusBadge status={c.status} STATUS_BADGE={STATUS_BADGE} statusLabel={statusLabel} /></td>
                   <td className="px-4 py-3">{c.slaDeadline ? (<span className={`text-xs flex items-center gap-1 whitespace-nowrap ${sla.cls}`}>{isSlaBreached ? <AlertTriangle className="h-3 w-3 shrink-0" /> : <Clock className="h-3 w-3 shrink-0" />}{sla.label}</span>) : (<span className="text-xs text-slate-300">—</span>)}</td>

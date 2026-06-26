@@ -1,12 +1,25 @@
 import { CheckCircle, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useEffect, useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export function ConfirmationModal({ isOpen, type, taskId, taskTitle, data }) {
   const navigate = useNavigate();
+  const taskIdFallback = useId();
+  const displayTaskId = taskId || `TASK-${taskIdFallback}`;
+  const [displayTime, setDisplayTime] = useState('');
 
-  // Use provided data or default values
-  const displayTaskId = taskId || 'TASK-' + Date.now();
+  useEffect(() => {
+    if (!displayTime) {
+      const timer = setTimeout(() => {
+        setDisplayTime(new Date().toLocaleString());
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
+    return undefined;
+  }, [displayTime]);
+
   const displayTaskTitle = taskTitle || 'Task';
 
   return (
@@ -109,7 +122,7 @@ export function ConfirmationModal({ isOpen, type, taskId, taskTitle, data }) {
                 </div>
                 <div className="flex items-center gap-2 text-[#059669]" style={{ fontSize: '14px' }}>
                   <span>☑</span>
-                  <span>{new Date().toLocaleString()}</span>
+                  <span>{displayTime}</span>
                 </div>
               </div>
 

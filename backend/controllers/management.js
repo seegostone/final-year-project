@@ -279,171 +279,194 @@ export const updateTaskStatus = async (req, res) => {
 
 
 
-  // @desc    Create a task for a complaint
-  // @route   POST /api/management/:id/tasks
-  // @access  Private (Admin, Estates Officer)
-  export const createTask = async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
+// @desc    Create a task for a complaint
+// @route   POST /api/management/:id/tasks
+// @access  Private (Admin, Estates Officer)
+export const createTask = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
+  }
+
+  try {
+    const db = req.app.locals.db;
+    const userId = req.user._id;
+    const userRole = req.user.normalizedRole || req.user.role;
+    const complaintId = req.params.id;
+    const {
+      title,
+      description,
+      notes,
+      priority,
+      estimatedDurationDays,
+      startDate,
+      assigneeId,
+      assigneeName,
+    } = req.body;
+
+    console.log('🔵 [CREATE TASK] for complaint', complaintId, 'by', userId.toString());
+
+    const allowedRoles = ['admin', 'estates_officer'];
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to create tasks' });
     }
 
-    try {
-      const db = req.app.locals.db;
-      const userId = req.user._id;
-      const userRole = req.user.normalizedRole || req.user.role;
-      const complaintId = req.params.id;
-      const { title, description, notes } = req.body;
-
-      console.log('🔵 [CREATE TASK] for complaint', complaintId, 'by', userId.toString());
-
-      const allowedRoles = ['admin', 'estates_officer'];
-      if (!allowedRoles.includes(userRole)) {
-        return res.status(403).json({ success: false, message: 'You do not have permission to create tasks' });
-      }
-
-      if (!ObjectId.isValid(complaintId)) {
-        return res.status(400).json({ success: false, message: 'Invalid complaint ID' });
-      }
-
-      const task = await managementOperations.addTaskToComplaint(db, complaintId, { title, description, notes }, userId);
-
-      if (!task) {
-        return res.status(404).json({ success: false, message: 'Complaint not found or task could not be created' });
-      }
-
-      res.status(201).json({ success: true, message: 'Task created', data: task });
-    } catch (error) {
-      console.error('Create task error:', error);
-      res.status(500).json({ success: false, message: 'Server error while creating task' });
-    }
-  };
-
-  // @desc    Assign a technician to a specific task
-  // @route   POST /api/management/:id/tasks/:taskId/assign
-  // @access  Private (Admin, Estates Officer)
-  export const assignTask = async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
+    if (!ObjectId.isValid(complaintId)) {
+      return res.status(400).json({ success: false, message: 'Invalid complaint ID' });
     }
 
-    try {
-      const db = req.app.locals.db;
-      const userId = req.user._id;
-      const userRole = req.user.normalizedRole || req.user.role;
-      const complaintId = req.params.id;
-      const taskId = req.params.taskId;
-      const { technicianId, technicianName } = req.body;
+    const task = await managementOperations.addTaskToComplaint(
+      db,
+      complaintId,
+      {
+        title,
+        description,
+        notes,
+        priority,
+        estimatedDurationDays,
+        startDate,
+        assigneeId,
+        assigneeName,
+      },
+      userId
+    );
 
-      console.log('🔵 [ASSIGN TASK]', taskId, 'for complaint', complaintId, 'to', technicianName);
-
-      const allowedRoles = ['admin', 'estates_officer'];
-      if (!allowedRoles.includes(userRole)) {
-        return res.status(403).json({ success: false, message: 'You do not have permission to assign tasks' });
-      }
-
-      if (!ObjectId.isValid(complaintId) || !ObjectId.isValid(taskId)) {
-        return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
-      }
-
-      // Prevent assigning if task already has an assignee
-      const complaintDoc = await db.collection('complaints').findOne({ _id: new ObjectId(complaintId) });
-      const targetTask = (complaintDoc?.tasks || []).find((t) => t._id.toString() === new ObjectId(taskId).toString());
-      if (!targetTask) {
-        return res.status(404).json({ success: false, message: 'Task not found' });
-      }
-      if (targetTask.assigneeId) {
-        return res.status(400).json({ success: false, message: 'Task already has an assignee' });
-      }
-
-      const isEligible = await userOperations.isTechnicianEligible(
-        db,
-        technicianId,
-        complaintDoc?.category || null
-      );
-
-      console.log('DEBUG assign: category=', complaintDoc?.category, 'technicianId=', technicianId, 'eligible=', isEligible);
-
-      if (!isEligible) {
-        return res.status(400).json({
-          success: false,
-          message: 'Selected technician is not eligible for this complaint category or has too many active tasks',
-        });
-      }
-
-      const updated = await managementOperations.assignTaskToComplaint(db, complaintId, taskId, { technicianId, technicianName }, userId);
-
-      if (updated) {
-        try {
-          const technician = await userOperations.findById(db, technicianId);
-          if (technician) {
-            await userOperations.addNotification(db, technician._id, {
-              type: 'task_assigned',
-              title: 'New task assigned',
-              message: `A new task "${updated.tasks.find((t) => t._id.toString() === taskId)?.title || 'Task'}" has been assigned to you.`,
-              complaintId: updated._id.toString(),
-              taskId,
-              route: `/technician/tasks/${taskId}`,
-            });
-
-            if (technician.email) {
-              await emailService.sendNotificationEmail(
-                technician.email,
-                'A task has been assigned to you',
-                `You have been assigned a new task for complaint ${updated.complaintId}.`,
-                { route: `/technician/tasks/${taskId}` }
-              );
-            }
-          }
-        } catch (notifyError) {
-          console.warn('Task assignment notification failed:', notifyError.message);
-        }
-      }
-
-      if (!updated) {
-        return res.status(404).json({ success: false, message: 'Task or complaint not found or cannot be assigned' });
-      }
-
-      res.status(200).json({ success: true, message: 'Task assigned', data: updated });
-    } catch (error) {
-      console.error('Assign task error:', error);
-      res.status(500).json({ success: false, message: 'Server error while assigning task' });
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Complaint not found or task could not be created' });
     }
-  };
 
-    // @desc    Unassign a technician from a specific task
-    // @route   POST /api/management/:id/tasks/:taskId/unassign
-    // @access  Private (Admin, Estates Officer)
-    export const unassignTask = async (req, res) => {
+    res.status(201).json({ success: true, message: 'Task created', data: task });
+  } catch (error) {
+    console.error('Create task error:', error);
+    res.status(500).json({ success: false, message: 'Server error while creating task' });
+  }
+};
+
+// @desc    Assign a technician to a specific task
+// @route   POST /api/management/:id/tasks/:taskId/assign
+// @access  Private (Admin, Estates Officer)
+export const assignTask = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
+  }
+
+  try {
+    const db = req.app.locals.db;
+    const userId = req.user._id;
+    const userRole = req.user.normalizedRole || req.user.role;
+    const complaintId = req.params.id;
+    const taskId = req.params.taskId;
+    const { technicianId, technicianName } = req.body;
+
+    console.log('🔵 [ASSIGN TASK]', taskId, 'for complaint', complaintId, 'to', technicianName);
+
+    const allowedRoles = ['admin', 'estates_officer'];
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to assign tasks' });
+    }
+
+    if (!ObjectId.isValid(complaintId) || !ObjectId.isValid(taskId)) {
+      return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
+    }
+
+    // Prevent assigning if task already has an assignee
+    const complaintDoc = await db.collection('complaints').findOne({ _id: new ObjectId(complaintId) });
+    const targetTask = (complaintDoc?.tasks || []).find((t) => t._id.toString() === new ObjectId(taskId).toString());
+    if (!targetTask) {
+      return res.status(404).json({ success: false, message: 'Task not found' });
+    }
+    if (targetTask.assigneeId) {
+      return res.status(400).json({ success: false, message: 'Task already has an assignee' });
+    }
+
+    const isEligible = await userOperations.isTechnicianEligible(
+      db,
+      technicianId,
+      complaintDoc?.category || null
+    );
+
+    console.log('DEBUG assign: category=', complaintDoc?.category, 'technicianId=', technicianId, 'eligible=', isEligible);
+
+    if (!isEligible) {
+      return res.status(400).json({
+        success: false,
+        message: 'Selected technician is not eligible for this complaint category or has too many active tasks',
+      });
+    }
+
+    const updated = await managementOperations.assignTaskToComplaint(db, complaintId, taskId, { technicianId, technicianName }, userId);
+
+    if (updated) {
       try {
-        const db = req.app.locals.db;
-        const userId = req.user._id;
-        const userRole = req.user.normalizedRole || req.user.role;
-        const complaintId = req.params.id;
-        const taskId = req.params.taskId;
+        const technician = await userOperations.findById(db, technicianId);
+        if (technician) {
+          await userOperations.addNotification(db, technician._id, {
+            type: 'task_assigned',
+            title: 'New task assigned',
+            message: `A new task "${updated.tasks.find((t) => t._id.toString() === taskId)?.title || 'Task'}" has been assigned to you.`,
+            complaintId: updated._id.toString(),
+            taskId,
+            route: `/technician/tasks/${taskId}`,
+          });
 
-        const allowedRoles = ['admin', 'estates_officer'];
-        if (!allowedRoles.includes(userRole)) {
-          return res.status(403).json({ success: false, message: 'You do not have permission to unassign tasks' });
+          if (technician.email) {
+            await emailService.sendNotificationEmail(
+              technician.email,
+              'A task has been assigned to you',
+              `You have been assigned a new task for complaint ${updated.complaintId}.`,
+              { route: `/technician/tasks/${taskId}` }
+            );
+          }
         }
-
-        if (!ObjectId.isValid(complaintId) || !ObjectId.isValid(taskId)) {
-          return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
-        }
-
-        const updated = await managementOperations.unassignTaskFromComplaint(db, complaintId, taskId, userId);
-
-        if (!updated) {
-          return res.status(404).json({ success: false, message: 'Task or complaint not found or cannot be unassigned' });
-        }
-
-        res.status(200).json({ success: true, message: 'Task unassigned', data: updated });
-      } catch (error) {
-        console.error('Unassign task error:', error);
-        res.status(500).json({ success: false, message: 'Server error while unassigning task' });
+      } catch (notifyError) {
+        console.warn('Task assignment notification failed:', notifyError.message);
       }
-    };
+    }
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Task or complaint not found or cannot be assigned' });
+    }
+
+    res.status(200).json({ success: true, message: 'Task assigned', data: updated });
+  } catch (error) {
+    console.error('Assign task error:', error);
+    res.status(500).json({ success: false, message: 'Server error while assigning task' });
+  }
+};
+
+// @desc    Unassign a technician from a specific task
+// @route   POST /api/management/:id/tasks/:taskId/unassign
+// @access  Private (Admin, Estates Officer)
+export const unassignTask = async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const userId = req.user._id;
+    const userRole = req.user.normalizedRole || req.user.role;
+    const complaintId = req.params.id;
+    const taskId = req.params.taskId;
+
+    const allowedRoles = ['admin', 'estates_officer'];
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to unassign tasks' });
+    }
+
+    if (!ObjectId.isValid(complaintId) || !ObjectId.isValid(taskId)) {
+      return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
+    }
+
+    const updated = await managementOperations.unassignTaskFromComplaint(db, complaintId, taskId, userId);
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Task or complaint not found or cannot be unassigned' });
+    }
+
+    res.status(200).json({ success: true, message: 'Task unassigned', data: updated });
+  } catch (error) {
+    console.error('Unassign task error:', error);
+    res.status(500).json({ success: false, message: 'Server error while unassigning task' });
+  }
+};
 
 // @desc    Get complaint management queue
 // @route   GET /api/management/queue
@@ -684,7 +707,92 @@ export const scheduleInspection = async (req, res) => {
   }
 };
 
-// @desc    Record resident approval/rejection
+// @desc    Request resident approval (Officer initiates)
+// @route   POST /api/management/:id/request-approval
+// @access  Private (Admin, Estates Officer)
+export const requestResidentApproval = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array(),
+    });
+  }
+
+  try {
+    const db = req.app.locals.db;
+    const userId = req.user._id;
+    const userRole = req.user.normalizedRole || req.user.role;
+    const complaintId = req.params.id;
+    const { message } = req.body;
+
+    console.log('🔵 [REQUEST APPROVAL]', complaintId, 'by', userId.toString());
+
+    // Check permission - only officers/admins can request
+    const allowedRoles = ['admin', 'estates_officer'];
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to request resident approval',
+      });
+    }
+
+    if (!ObjectId.isValid(complaintId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid complaint ID',
+      });
+    }
+
+    const complaint = await managementOperations.requestResidentApproval(
+      db,
+      complaintId,
+      {
+        message,
+        requestedBy: userId,
+      }
+    );
+
+    if (!complaint) {
+      return res.status(404).json({
+        success: false,
+        message: 'Complaint not found or not in resolved state',
+      });
+    }
+
+    // Send notification/email to resident
+    try {
+      const submitter = await userOperations.findById(db, complaint.userId);
+      if (submitter?.email) {
+        await emailService.sendNotificationEmail(
+          submitter.email,
+          'Your work approval is requested',
+          `Please review the completed work for complaint ${complaint.complaintId || complaint._id.toString()} and provide your feedback. ${message || ''}`,
+          { route: `/complaints/${complaint._id.toString()}` }
+        );
+      }
+    } catch (notifyError) {
+      console.warn('Request approval notification failed:', notifyError);
+    }
+
+    console.log('✅ [REQUEST APPROVAL] Sent:', complaintId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Resident approval request sent successfully',
+      data: complaint,
+    });
+  } catch (error) {
+    console.error('Request resident approval error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while requesting resident approval',
+    });
+  }
+};
+
+// @desc    Record resident approval/rejection (Resident responds)
 // @route   PUT /api/management/:id/resident-approval
 // @access  Private (Resident, Admin, Estates Officer)
 export const recordResidentApproval = async (req, res) => {
@@ -700,6 +808,7 @@ export const recordResidentApproval = async (req, res) => {
   try {
     const db = req.app.locals.db;
     const userId = req.user._id;
+    const userRole = req.user.normalizedRole || req.user.role;
     const complaintId = req.params.id;
     const {
       approvalStatus,
@@ -714,6 +823,35 @@ export const recordResidentApproval = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Invalid complaint ID',
+      });
+    }
+
+    const complaintDoc = await db.collection('complaints').findOne({
+      _id: new ObjectId(complaintId),
+    });
+
+    if (!complaintDoc) {
+      return res.status(404).json({
+        success: false,
+        message: 'Complaint not found',
+      });
+    }
+
+    const allowedAdminRoles = ['admin', 'estates_officer'];
+    if (
+      !allowedAdminRoles.includes(userRole) &&
+      complaintDoc.userId.toString() !== userId.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to submit approval for this complaint',
+      });
+    }
+
+    if (complaintDoc.status !== 'resolved') {
+      return res.status(400).json({
+        success: false,
+        message: 'Resident approval can only be submitted for resolved complaints',
       });
     }
 
@@ -734,6 +872,73 @@ export const recordResidentApproval = async (req, res) => {
         success: false,
         message: 'Complaint not found or cannot record approval',
       });
+    }
+
+    try {
+      const officerMessage =
+        approvalStatus === 'ACCEPTED'
+          ? `Resident accepted the resolution for complaint ${complaint.complaintId || complaint._id.toString()}.`
+          : approvalStatus === 'REJECTED'
+            ? `Resident rejected the resolution for complaint ${complaint.complaintId || complaint._id.toString()}.`
+            : `Resident partially accepted the resolution for complaint ${complaint.complaintId || complaint._id.toString()}.`;
+
+      const officers = await db.collection('users')
+        .find({ normalizedRole: { $in: ['estates_officer', 'admin'] }, isActive: true })
+        .toArray();
+
+      await Promise.allSettled(
+        officers.map(async (officer) => {
+          await db.collection('users').updateOne(
+            { _id: officer._id },
+            {
+              $push: {
+                notifications: {
+                  $each: [
+                    {
+                      _id: new ObjectId(),
+                      type:
+                        approvalStatus === 'ACCEPTED'
+                          ? 'resident_feedback_accepted'
+                          : approvalStatus === 'REJECTED'
+                            ? 'resident_feedback_rejected'
+                            : 'resident_feedback_partial',
+                      title: 'Resident feedback received',
+                      message: officerMessage,
+                      complaintId: complaint._id.toString(),
+                      route: '/management/queue',
+                      isRead: false,
+                      createdAt: new Date(),
+                    },
+                  ],
+                  $position: 0,
+                },
+              },
+              $set: { updatedAt: new Date() },
+            }
+          );
+
+          if (officer.email) {
+            await emailService.sendNotificationEmail(
+              officer.email,
+              'Resident approval response received',
+              officerMessage,
+              { route: '/management/queue' }
+            );
+          }
+        })
+      );
+
+      const submitter = await userOperations.findById(db, complaint.userId);
+      if (submitter?.email) {
+        await emailService.sendNotificationEmail(
+          submitter.email,
+          'Your approval response has been recorded',
+          `Your feedback for complaint ${complaint.complaintId || complaint._id.toString()} has been recorded successfully. Thank you for your response.`,
+          { route: `/complaints/${complaint._id.toString()}` }
+        );
+      }
+    } catch (notifyError) {
+      console.warn('Resident approval notification failed:', notifyError);
     }
 
     console.log('✅ [RESIDENT APPROVAL] Recorded:', complaintId);

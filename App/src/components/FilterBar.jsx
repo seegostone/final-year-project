@@ -22,12 +22,12 @@ export default function FilterBar({
             placeholder="Search ID, title, location, submitter…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 h-10 text-sm bg-slate-50 border-slate-200"
+            className="w-full pl-9 h-10 text-sm bg-slate-50 border-slate-200 rounded-none"
           />
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-10 w-full sm:w-[150px] text-xs bg-slate-50 border-slate-200">
+            <SelectTrigger className="h-10 w-full sm:w-[150px] text-xs bg-slate-50 border-slate-200 rounded-none">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -38,7 +38,7 @@ export default function FilterBar({
           </Select>
 
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="h-10 w-full sm:w-[130px] text-xs bg-slate-50 border-slate-200">
+            <SelectTrigger className="h-10 w-full sm:w-[130px] text-xs bg-slate-50 border-slate-200 rounded-none">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -49,7 +49,7 @@ export default function FilterBar({
           </Select>
 
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-10 w-full sm:w-[130px] text-xs bg-slate-50 border-slate-200">
+            <SelectTrigger className="h-10 w-full sm:w-[130px] text-xs bg-slate-50 border-slate-200 rounded-none">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

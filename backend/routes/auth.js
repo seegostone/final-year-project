@@ -34,8 +34,12 @@ export const registerValidation = [
     .withMessage('Please provide a valid email address')
     .normalizeEmail()
     .custom((email) => {
-      if (!email.toLowerCase().endsWith('@gmail.com')) {
+      const normalizedEmail = email.toLowerCase();
+      if (!normalizedEmail.endsWith(gmailDomain)) {
         throw new Error('Email must be a valid @gmail.com address');
+      }
+      if (isPlaceholderEmail(normalizedEmail)) {
+        throw new Error('Please use a real personal email address, not a placeholder.');
       }
       return true;
     }),
@@ -87,6 +91,22 @@ export const registerValidation = [
 ];
 
 const gmailDomain = '@gmail.com';
+
+const isPlaceholderEmail = (email) => {
+  const localPart = String(email).split('@')[0].toLowerCase();
+  const invalidPatterns = [
+    /^resident[_\d].*/,
+    /^user[_\d].*/,
+    /^test[_\d].*/,
+    /^dummy[_\d].*/,
+    /^example[_\d].*/,
+    /^admin[_\d]?.*/,
+    /^(no[-_.]?reply|noreply|support|contact)$/,
+    /^guest[_\d]?.*/,
+  ];
+
+  return invalidPatterns.some((pattern) => pattern.test(localPart));
+};
 
 export const loginValidation = [
   body('email')

@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import { Card } from './ui/card';
 import FilterBar from './FilterBar';
 import ComplaintTable from './ComplaintTable';
@@ -19,8 +20,9 @@ function QueueTab(props) {
   } = props;
 
   return (
-    <Card className="border-slate-200 shadow-sm">
-      <FilterBar
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+      <Card className="border-slate-200 shadow-none rounded-none">
+        <FilterBar
         search={search} setSearch={setSearch}
         statusFilter={statusFilter} setStatusFilter={setStatusFilter}
         priorityFilter={priorityFilter} setPriorityFilter={setPriorityFilter}
@@ -34,6 +36,7 @@ function QueueTab(props) {
 
       <PaginationControls page={page} setPage={setPage} totalPages={totalPages} totalComplaints={totalComplaints} loading={loading} />
     </Card>
+    </motion.div>
   );
 }
 

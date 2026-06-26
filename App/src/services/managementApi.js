@@ -163,6 +163,36 @@ const managementService = {
     }
   },
 
+  // Assess & Prioritize (Triage)
+  async assessPrioritizeComplaint(complaintId, data) {
+    try {
+      const response = await axiosInstance.post(
+        `/management/${complaintId}/triage`,
+        {
+          priority: data.priority,
+          triageNotes: data.triageNotes,
+          triageBy: data.triageBy,
+        }
+      );
+
+      return {
+        success: true,
+        data: response.data || response,
+        message: response.message,
+      };
+    } catch (error) {
+      console.error('Assess & prioritize error:', error);
+      const formattedError = handleApiError(error);
+      return {
+        success: false,
+        error: formattedError.message,
+        type: formattedError.type,
+        status: error.status || 500,
+        validationErrors: formattedError.validationErrors,
+      };
+    }
+  },
+
   // Define scope
   async defineScopeComplaint(complaintId, data) {
     try {
@@ -241,7 +271,33 @@ const managementService = {
     }
   },
 
-  // Record resident approval
+  // Request resident approval (Officer initiates)
+  async requestResidentApproval(complaintId, data) {
+    try {
+      const response = await axiosInstance.post(
+        `/management/${complaintId}/request-approval`,
+        data
+      );
+
+      return {
+        success: true,
+        data: response.data || response,
+        message: response.message,
+      };
+    } catch (error) {
+      console.error('Request resident approval error:', error);
+      const formattedError = handleApiError(error);
+      return {
+        success: false,
+        error: formattedError.message,
+        type: formattedError.type,
+        status: error.status || 500,
+        validationErrors: formattedError.validationErrors,
+      };
+    }
+  },
+
+  // Record resident approval (Resident responds)
   async recordResidentApproval(complaintId, data) {
     try {
       const response = await axiosInstance.put(

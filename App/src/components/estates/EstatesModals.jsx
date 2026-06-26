@@ -32,6 +32,110 @@ function remainingDays(complaint) {
   return Math.max(0, total - used);
 }
 
+// ─── Assess & Prioritize Modal ────────────────────────────────────────────────
+
+export function AssessPrioritizeModal({ open, onClose, onSubmit }) {
+  const [priority, setPriority] = useState('MEDIUM');
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!priority) {
+      setError('Please select a priority level.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      await onSubmit(priority, notes);
+      setSuccess(true);
+      setTimeout(() => {
+        onClose();
+        setSuccess(false);
+        setPriority('MEDIUM');
+        setNotes('');
+      }, 1500);
+    } catch (err) {
+      setError(err.message || 'Failed to assess and prioritize complaint.');
+      setLoading(false);
+    }
+    };
+
+  const handleOpenChange = (newOpen) => {
+    if (!newOpen && !loading) {
+      onClose();
+      setError(null);
+      setSuccess(false);
+      setPriority('MEDIUM');
+      setNotes('');
+    }
+  };
+
+    return (
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Assess & Prioritize Complaint</DialogTitle>
+        </DialogHeader>
+
+        {success ? (
+          <div className="flex flex-col items-center justify-center py-8">
+            <CheckCircle2 className="h-12 w-12 text-emerald-500 mb-3" />
+            <p className="text-sm font-medium text-emerald-700">Priority set successfully!</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {error && (
+              <Alert className="border-rose-400/40 bg-rose-500/20">
+                <AlertTriangle className="h-3.5 w-3.5 text-rose-300" />
+                <AlertDescription className="text-rose-200 text-xs">{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="space-y-2">
+              <Label>Priority Level <span className="text-rose-500">*</span></Label>
+              <Select value={priority} onValueChange={setPriority} disabled={loading}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CRITICAL">🔴 Critical (1 day SLA)</SelectItem>
+                  <SelectItem value="HIGH">🟠 High (2 days SLA)</SelectItem>
+                  <SelectItem value="MEDIUM">🟡 Medium (5 days SLA)</SelectItem>
+                  <SelectItem value="LOW">🟢 Low (10 days SLA)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Additional Notes</Label>
+              <Textarea
+                placeholder="Any observations about this complaint..."
+                rows={3}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                disabled={loading}
+                className="text-sm"
+              />
+            </div>
+          </div>
+        )}
+
+        {!success && (
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">Cancel</Button>
+            <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {loading ? 'Assessing...' : 'Set Priority'}
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Define Scope Modal ───────────────────────────────────────────────────────
 
 export function DefineScopeModal({ open, complaint, onClose, onSubmit }) {
@@ -43,18 +147,16 @@ export function DefineScopeModal({ open, complaint, onClose, onSubmit }) {
   const [error, setError] = useState(null);
 
   const handleSubmit = async () => {
-    if (!scopeDescription.trim() || !estimatedDuration) {
+      if (!scopeDescription.trim() || !estimatedDuration || parseInt(estimatedDuration, 10) <= 0) {
       setError('Scope description and estimated duration are required.');
       return;
     }
     setLoading(true);
     setError(null);
-    try {
+      try {
       await onSubmit(complaint._id, {
         scopeDescription: scopeDescription.trim(),
-        estimatedDuration: parseFloat(estimatedDuration),
-        requiredSkills: requiredSkills.split(',').map((s) => s.trim()).filter(Boolean),
-        estimatedCost: estimatedCost ? parseFloat(estimatedCost) : 0,
+        estimatedDuration: parseInt(estimatedDuration, 10),
       });
       onClose();
     } catch {
@@ -84,6 +186,8 @@ export function DefineScopeModal({ open, complaint, onClose, onSubmit }) {
             <Textarea
               placeholder="Describe the full scope of work required..."
               rows={3}
+              id="scopeDescription"
+              name="scopeDescription"
               value={scopeDescription}
               onChange={(e) => setScopeDescription(e.target.value)}
             />
@@ -92,10 +196,12 @@ export function DefineScopeModal({ open, complaint, onClose, onSubmit }) {
             <div className="space-y-1.5">
               <Label>Total Duration (days) <span className="text-rose-500">*</span></Label>
               <Input
-                type="number"
-                min="0.5"
-                step="0.5"
+                  type="number"
+                  min="1"
+                  step="1"
                 placeholder="e.g. 5"
+                id="estimatedDuration"
+                name="estimatedDuration"
                 value={estimatedDuration}
                 onChange={(e) => setEstimatedDuration(e.target.value)}
               />
@@ -106,6 +212,8 @@ export function DefineScopeModal({ open, complaint, onClose, onSubmit }) {
                 type="number"
                 min="0"
                 placeholder="e.g. 500000"
+                id="estimatedCost"
+                name="estimatedCost"
                 value={estimatedCost}
                 onChange={(e) => setEstimatedCost(e.target.value)}
               />
@@ -115,6 +223,8 @@ export function DefineScopeModal({ open, complaint, onClose, onSubmit }) {
             <Label>Required Skills (comma-separated)</Label>
             <Input
               placeholder="e.g. Plumbing, Electrical"
+              id="requiredSkills"
+              name="requiredSkills"
               value={requiredSkills}
               onChange={(e) => setRequiredSkills(e.target.value)}
             />
@@ -145,12 +255,12 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
   const [error, setError] = useState(null);
 
   const remaining = remainingDays(complaint);
-  const durationNum = parseFloat(durationDays) || 0;
+  const durationNum = parseInt(durationDays, 10) || 0;
   const exceedsScope = complaint.scopeDefinition && durationNum > remaining;
 
   const handleSubmit = async () => {
     if (!title.trim()) { setError('Task title is required.'); return; }
-    if (!durationDays || durationNum <= 0) { setError('Duration must be greater than 0.'); return; }
+    if (!durationDays || durationNum < 1) { setError('Duration must be a whole number of days (minimum 1).'); return; }
     if (exceedsScope) { setError(`Duration exceeds remaining scope capacity (${remaining} day(s) available).`); return; }
     setLoading(true);
     setError(null);
@@ -203,6 +313,8 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
             <Label>Task Title <span className="text-rose-500">*</span></Label>
             <Input
               placeholder="e.g. Replace burst pipe section"
+              id="taskTitle"
+              name="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
@@ -213,6 +325,8 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
             <Textarea
               placeholder="Detailed task description..."
               rows={2}
+              id="taskDescription"
+              name="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
@@ -234,9 +348,11 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
               <Label>Duration (days) <span className="text-rose-500">*</span></Label>
               <Input
                 type="number"
-                min="0.25"
-                step="0.25"
-                placeholder="e.g. 1.5"
+                min="1"
+                step="1"
+                placeholder="e.g. 1"
+                id="durationDays"
+                name="estimatedDurationDays"
                 value={durationDays}
                 onChange={(e) => setDurationDays(e.target.value)}
                 className={`${exceedsScope ? 'border-rose-400' : 'border-slate-200'} w-full rounded-lg bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100`}
@@ -249,8 +365,10 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
               <Label>Start Date</Label>
               <Input
                 type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                  id="startDate"
+                  name="startDate"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
               />
             </div>
@@ -281,6 +399,8 @@ export function CreateTaskModal({ open, complaint, technicians, onClose, onSubmi
             <Label>Notes</Label>
             <Input
               placeholder="Any additional notes..."
+              id="taskNotes"
+              name="notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
@@ -455,6 +575,8 @@ export function RequestReworkModal({ open, complaint, onClose, onSubmit }) {
             <Textarea
               placeholder="Describe what needs to be redone and why..."
               rows={3}
+              id="reworkDetails"
+              name="reworkDetails"
               value={reworkDetails}
               onChange={(e) => setReworkDetails(e.target.value)}
               disabled={!canRework}
@@ -537,6 +659,8 @@ export function EscalateModal({ open, complaint, onClose, onSubmit }) {
             <Textarea
               placeholder="Provide full justification for escalation..."
               rows={3}
+              id="escalationDetails"
+              name="escalationDetails"
               value={escalationDetails}
               onChange={(e) => setEscalationDetails(e.target.value)}
             />
@@ -548,6 +672,92 @@ export function EscalateModal({ open, complaint, onClose, onSubmit }) {
             {loading ? 'Escalating...' : 'Escalate Complaint'}
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Close Complaint Modal ────────────────────────────────────────────────────
+
+// ─── Request Resident Approval Modal ──────────────────────────────────────────
+
+export function RequestApprovalModal({ open, complaint, onClose, onSubmit }) {
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await onSubmit(complaint._id, {
+        message: message.trim() || undefined,
+      });
+      setSuccess(true);
+      setTimeout(() => {
+        setSuccess(false);
+        setMessage('');
+        onClose();
+      }, 1200);
+    } catch {
+      setError('Failed to request approval. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-md bg-white border border-slate-200">
+        <DialogHeader>
+          <DialogTitle className="text-blue-600">Request Approval — {complaint.complaintId}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          {success ? (
+            <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-3">
+              <CheckCircle2 className="h-5 w-5" />
+              <span className="text-sm font-medium">Approval request sent to resident.</span>
+            </div>
+          ) : (
+            <>
+              {error && (
+                <Alert className="border-rose-200 bg-rose-50">
+                  <AlertTriangle className="h-4 w-4 text-rose-600" />
+                  <AlertDescription className="text-rose-800 text-sm">{error}</AlertDescription>
+                </Alert>
+              )}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  Request the resident to review and approve the completed work. They will receive an email notification.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Optional Message to Resident</Label>
+                <Textarea
+                  placeholder="Add any additional notes or instructions for the resident (optional)..."
+                  rows={3}
+                  id="approvalMessage"
+                  name="message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  maxLength={500}
+                />
+                <p className="text-xs text-slate-500">{message.length}/500 characters</p>
+              </div>
+            </>
+          )}
+        </div>
+        {!success && (
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {loading ? 'Sending...' : 'Request Approval'}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -605,6 +815,8 @@ export function CloseComplaintModal({ open, complaint, onClose, onSubmit }) {
                 <Textarea
                   placeholder="Summarize the resolution and outcome..."
                   rows={3}
+                  id="closureSummary"
+                  name="closureSummary"
                   value={closureSummary}
                   onChange={(e) => setClosureSummary(e.target.value)}
                 />
@@ -613,6 +825,8 @@ export function CloseComplaintModal({ open, complaint, onClose, onSubmit }) {
                 <Label>Actual Cost Incurred (UGX)</Label>
                 <Input
                   type="number" min="0" placeholder="e.g. 450000"
+                  id="costActual"
+                  name="costActual"
                   value={costActual} onChange={(e) => setCostActual(e.target.value)}
                 />
               </div>

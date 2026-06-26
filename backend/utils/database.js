@@ -663,14 +663,66 @@ export const complaintOperations = {
       category: complaintData.category,
       urgency,
       description: complaintData.description,
-      status: 'pending', // pending, assigned, in-progress, resolved
+      status: 'pending', // pending, triaged, analyzed, scope_defined, assigned, in-progress, resolved, validated, rework_required, escalated, closed
       attachments,
       hasAttachment: attachments.length > 0,
       imageData: complaintData.imageData || null,
+      
+      // Workflow fields
+      priority: null,
+      slaDeadline: null,
+      
+      // Assignment fields
       assignedTo: null,
       assignedAt: null,
+      assignment: null,  // { technicianId, technicianName, assignedAt, confirmed }
+      
+      // Resolution fields
       resolvedAt: null,
       resolutionNotes: null,
+      closedAt: null,
+      closedBy: null,
+      
+      // Scope definition
+      scopeDefinition: null,  // { description, estimatedDuration, requiredSkills, estimatedCost, dependencies }
+      
+      // Tasks array (for work breakdown)
+      tasks: [],
+      
+      // Resident validation / Approval workflow
+      residentValidation: {
+        requestedAt: null,
+        requestedBy: null,
+        requestMessage: null,
+        isPending: false,
+        completedAt: null,
+        approvedBy: null,
+        status: null,  // ACCEPTED, REJECTED, PARTIAL
+        feedback: null,
+        satisfactionRating: null,
+        rejectionReason: null,
+      },
+      
+      // Quality check
+      qualityCheck: null,  // { checkedBy, checkedAt, status, notes, photos }
+      
+      // Escalation
+      escalation: null,  // { status, escalatedTo, escalatedAt, reason }
+      
+      // Rework tracking
+      reworkCount: 0,
+      reworkHistory: [],
+      
+      // Closure report
+      closureReport: null,  // { summary, preventiveRecommendations, costActual, timeToResolve }
+      
+      // Performance metrics
+      metrics: {
+        slaMetCompliance: null,
+        totalHandlingTime: null,
+      },
+      
+      // History log
       history: [
         buildHistoryEntry({
           action: 'submitted',
@@ -682,6 +734,8 @@ export const complaintOperations = {
           note: 'Complaint submitted',
         }),
       ],
+      
+      // Timestamps
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -979,7 +1033,7 @@ export const managementOperations = {
   async validateComplaint(db, complaintId, validationData) {
     const complaints = db.collection('complaints');
 
-    // Query by MongoDB _id (ObjectId), consistent with your existing pattern
+    // Query by MongoDB _id (ObjectId)
     const complaint = await complaints.findOne({
       _id: new ObjectId(complaintId),
     });
@@ -1025,7 +1079,10 @@ export const managementOperations = {
     const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
     if (!complaint) return null;
 
-    const estimatedDurationDays = parseFloat(taskData.estimatedDurationDays) || 1;
+    // Ensure task duration is a whole number of days (round up)
+    const estimatedDurationDays = Number.isFinite(Number(taskData.estimatedDurationDays))
+      ? Math.ceil(Number(taskData.estimatedDurationDays))
+      : 1;
 
     // Duration validation against complaint scope
     const scopeDuration = complaint.scopeDefinition?.estimatedDuration;
@@ -1035,14 +1092,12 @@ export const managementOperations = {
       );
       if (existingTotal + estimatedDurationDays > scopeDuration) {
         throw new Error(
-          `Task duration exceeds remaining scope capacity. ` +
-          `Available: ${(scopeDuration - existingTotal).toFixed(2)} day(s). ` +
-          `Requested: ${estimatedDurationDays} day(s).`
+          `Task duration exceeds remaining scope capacity. Available: ${(scopeDuration - existingTotal).toFixed(2)} day(s). Requested: ${estimatedDurationDays} day(s).`
         );
       }
     }
 
-    // Calculate deadline from startDate + estimatedDurationDays
+    // Calculate deadline from startDate + estimatedDurationDays (whole days)
     const startDate = taskData.startDate ? new Date(taskData.startDate) : new Date();
     const deadline = new Date(startDate.getTime() + estimatedDurationDays * 24 * 60 * 60 * 1000);
 
@@ -1071,7 +1126,7 @@ export const managementOperations = {
       createdBy: new ObjectId(createdBy),
       createdAt: new Date(),
     };
- console.log(`${task}- for debugging addTaskToComplaint function`);
+    console.log('addTaskToComplaint task', task);
     const historyEntry = buildHistoryEntry({
       action: 'task_created',
       from: complaint.status,
@@ -1141,6 +1196,39 @@ export const managementOperations = {
     );
 
     if (result.modifiedCount === 0) return null;
+
+    // After updating task, check if ALL tasks are now done
+    const updatedComplaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
+    if (statusData.status === 'done' && updatedComplaint?.tasks) {
+      const allTasksDone = updatedComplaint.tasks.length > 0 && 
+                          updatedComplaint.tasks.every(t => t.status === 'done');
+
+      // If all tasks are done and complaint is not already resolved/closed, auto-transition to resolved
+      if (allTasksDone && !['resolved', 'closed', 'validated', 'rework_required'].includes(updatedComplaint.status)) {
+        const autoTransitionHistory = buildHistoryEntry({
+          action: 'auto_resolved',
+          from: updatedComplaint.status,
+          to: 'resolved',
+          by: updatedBy,
+          byName: 'System',
+          byRole: 'system',
+          note: 'All tasks completed. Complaint automatically moved to resolved status.',
+        });
+
+        await complaints.updateOne(
+          { _id: new ObjectId(complaintId) },
+          {
+            $set: { 
+              status: 'resolved',
+              resolvedAt: new Date(),
+              updatedAt: new Date(),
+            },
+            $push: { history: autoTransitionHistory },
+          }
+        );
+      }
+    }
+
     return await complaints.findOne({ _id: new ObjectId(complaintId) });
   },
 
@@ -1158,34 +1246,48 @@ export const managementOperations = {
     });
     if (!complaint) return null;
 
-    // Calculate SLA deadline based on priority
+    // Calculate SLA deadline based on priority but avoid overwriting
+    // existing values set by other phases (e.g. scope definition or previous triage).
     const slaTiers = {
-      CRITICAL: 1,    // 1 day
-      HIGH: 2,        // 2 days
-      MEDIUM: 5,      // 5 days
-      LOW: 10,        // 10 days
+      CRITICAL: 1, // 1 day
+      HIGH: 2, // 2 days
+      MEDIUM: 5, // 5 days
+      LOW: 10, // 10 days
     };
 
-    const slaDays = slaTiers[triageData.priority] || 5;
-    const slaDeadline = new Date(
-      Date.now() + slaDays * 24 * 60 * 60 * 1000
-    );
+    const updateFields = { updatedAt: new Date() };
 
-    const updateFields = {
-      status: 'triaged',
-      priority: triageData.priority,
-      slaDeadline,
-      updatedAt: new Date(),
-    };
+    // Only set priority if it's not already defined on the complaint
+    if (!complaint.priority && triageData.priority) {
+      updateFields.priority = triageData.priority;
+    }
+
+    // Only set SLA deadline if it's not already present
+    if (!complaint.slaDeadline && triageData.priority) {
+      const slaDays = slaTiers[triageData.priority] || 5;
+      const slaDeadline = new Date(Date.now() + slaDays * 24 * 60 * 60 * 1000);
+      updateFields.slaDeadline = slaDeadline;
+    }
+
+    // Only change status to 'triaged' when complaint is still pending
+    if (complaint.status === 'pending') {
+      updateFields.status = 'triaged';
+    }
+
+    // If nothing meaningful would be changed, return the complaint unchanged
+    const meaningfulKeys = Object.keys(updateFields).filter((k) => k !== 'updatedAt');
+    if (meaningfulKeys.length === 0) {
+      return complaint;
+    }
 
     const historyEntry = buildHistoryEntry({
       action: 'triaged',
       from: complaint.status,
-      to: 'triaged',
+      to: updateFields.status || complaint.status,
       by: triageData.triageBy,
       byName: 'Estates Officer',
       byRole: 'estates_officer',
-      note: `Priority: ${triageData.priority}. ${triageData.triageNotes || ''}`,
+      note: `Priority: ${updateFields.priority || complaint.priority || 'unchanged'}. ${triageData.triageNotes || ''}`,
     });
 
     const result = await complaints.updateOne(
@@ -1211,26 +1313,51 @@ export const managementOperations = {
     });
     if (!complaint) return null;
 
-    const updateFields = {
-      status: 'scope_defined',
-      'scopeDefinition.description': scopeData.scopeDescription,
-      'scopeDefinition.estimatedDuration': scopeData.estimatedDuration || 2,
-      'scopeDefinition.requiredSkills': scopeData.requiredSkills || [],
-      'scopeDefinition.estimatedCost': scopeData.estimatedCost || 0,
-      'scopeDefinition.dependencies': scopeData.dependencies?.map(
-        (id) => new ObjectId(id)
-      ) || [],
-      updatedAt: new Date(),
-    };
+    // Do not overwrite existing scope definition or estimated duration
+    const updateFields = { updatedAt: new Date() };
+
+    if (!complaint.scopeDefinition?.description && scopeData.scopeDescription) {
+      updateFields['scopeDefinition.description'] = scopeData.scopeDescription;
+    }
+
+    if (!complaint.scopeDefinition?.estimatedDuration) {
+      updateFields['scopeDefinition.estimatedDuration'] = Number.isFinite(Number(scopeData.estimatedDuration))
+        ? Math.ceil(Number(scopeData.estimatedDuration))
+        : 2;
+    }
+
+    if (!complaint.scopeDefinition?.requiredSkills) {
+      updateFields['scopeDefinition.requiredSkills'] = scopeData.requiredSkills || [];
+    }
+
+    if (!complaint.scopeDefinition?.estimatedCost) {
+      updateFields['scopeDefinition.estimatedCost'] = scopeData.estimatedCost || 0;
+    }
+
+    if (!complaint.scopeDefinition?.dependencies) {
+      updateFields['scopeDefinition.dependencies'] = scopeData.dependencies?.map((id) => new ObjectId(id)) || [];
+    }
+
+    // Only advance status to 'scope_defined' if complaint is at or before 'triaged'
+    const promotableStatuses = ['pending', 'triaged'];
+    if (promotableStatuses.includes(complaint.status)) {
+      updateFields.status = 'scope_defined';
+    }
+
+    // If nothing meaningful would be changed, return the complaint unchanged
+    const meaningfulKeys = Object.keys(updateFields).filter((k) => k !== 'updatedAt');
+    if (meaningfulKeys.length === 0) {
+      return complaint;
+    }
 
     const historyEntry = buildHistoryEntry({
       action: 'scope_defined',
       from: complaint.status,
-      to: 'scope_defined',
+      to: updateFields.status || complaint.status,
       by: scopeData.definedBy,
       byName: 'Estates Officer',
       byRole: 'estates_officer',
-      note: `Scope: ${scopeData.scopeDescription}`,
+      note: `Scope: ${updateFields['scopeDefinition.description'] || complaint.scopeDefinition?.description || ''}`,
     });
 
     const result = await complaints.updateOne(
@@ -1555,7 +1682,50 @@ export const managementOperations = {
     return await complaints.findOne({ _id: new ObjectId(complaintId) });
   },
 
-  // Record resident approval (Phase 4)
+  // Request resident approval (Phase 4 - Officer initiates)
+  async requestResidentApproval(db, complaintId, requestData) {
+    const complaints = db.collection('complaints');
+
+    const complaint = await complaints.findOne({
+      _id: new ObjectId(complaintId),
+    });
+    if (!complaint) return null;
+
+    // Only valid for resolved complaints
+    if (complaint.status !== 'resolved') return null;
+
+    const updateFields = {
+      'residentValidation.requestedAt': new Date(),
+      'residentValidation.requestedBy': new ObjectId(requestData.requestedBy),
+      'residentValidation.requestMessage': requestData.message || 'Please review and approve the completed work.',
+      'residentValidation.isPending': true,
+      updatedAt: new Date(),
+    };
+
+    const historyEntry = buildHistoryEntry({
+      action: 'approval_requested',
+      from: complaint.status,
+      to: complaint.status,
+      by: requestData.requestedBy,
+      byName: 'Estates Officer',
+      byRole: 'estates_officer',
+      note: `Resident approval requested: ${requestData.message || 'Please review and approve the work.'}`,
+    });
+
+    const result = await complaints.updateOne(
+      { _id: new ObjectId(complaintId) },
+      {
+        $set: updateFields,
+        $push: { history: historyEntry },
+      }
+    );
+
+    if (result.modifiedCount === 0) return null;
+
+    return await complaints.findOne({ _id: new ObjectId(complaintId) });
+  },
+
+  // Record resident approval (Phase 4 - Resident responds)
   async recordResidentApproval(db, complaintId, approvalData) {
     const complaints = db.collection('complaints');
 
@@ -1564,8 +1734,14 @@ export const managementOperations = {
     });
     if (!complaint) return null;
 
+    // Check if approval was actually requested
+    if (!complaint.residentValidation?.isPending) return null;
+
     let nextStatus = complaint.status;
-    if (approvalData.approvalStatus === 'ACCEPTED') {
+    if (
+      approvalData.approvalStatus === 'ACCEPTED' ||
+      approvalData.approvalStatus === 'PARTIAL'
+    ) {
       nextStatus = 'validated';
     } else if (approvalData.approvalStatus === 'REJECTED') {
       nextStatus = 'rework_required';
@@ -1578,6 +1754,7 @@ export const managementOperations = {
       'residentValidation.status': approvalData.approvalStatus,
       'residentValidation.feedback': approvalData.feedback || '',
       'residentValidation.satisfactionRating': approvalData.satisfactionRating || 0,
+      'residentValidation.isPending': false,
       updatedAt: new Date(),
     };
 
@@ -1711,7 +1888,7 @@ export const managementOperations = {
 
     // Calculate time to resolve
     const timeToResolveMs = new Date() - complaint.createdAt;
-    const timeToResolveDays = timeToResolveMs / (1000 * 60 * 60 * 24);
+    const timeToResolveDays = Math.ceil(timeToResolveMs / (1000 * 60 * 60 * 24));
 
     // Check SLA compliance
     const slaMetCompliance = !complaint.slaDeadline ||

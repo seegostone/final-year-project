@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, BarChart3, Layers } from 'lucide-react';
+import { motion } from 'motion/react';
+import { toast } from 'sonner';
+import { BarChart3, ChevronLeft, Layers } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Card } from './ui/card.jsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs.jsx';
 import { ComplaintDetailDrawer } from './estates/ComplaintDetailDrawer';
@@ -70,6 +73,7 @@ const LIMIT = 8;
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function EstatesOfficerDashboard() {
+  const navigate = useNavigate();
   const [complaints, setComplaints] = useState([]);
   const [stats, setStats] = useState({});
   const [technicians, setTechnicians] = useState([]);
@@ -94,7 +98,6 @@ export default function EstatesOfficerDashboard() {
 
   // Ref guards for debounce and mount state
   const debounceRef = useRef(null);
-  const mountedRef = useRef(false);
 
   // ── Fetch helper (stable across renders) ────────────────────────────────────────
 
@@ -132,6 +135,7 @@ export default function EstatesOfficerDashboard() {
     } catch (error) {
       const message = error?.message || 'Failed to load management queue';
       console.error('Failed to load management queue:', error);
+      toast.error(message);
       setQueueError(message);
       setComplaints([]);
       setTotalPages(1);
@@ -173,6 +177,7 @@ export default function EstatesOfficerDashboard() {
   // ── Initial load + stats/technicians ──────────────────────────────────────────
 
   useEffect(() => {
+    // The effect should only run once on mount. filter state changes are handled by other effects.
     let isMounted = true;
 
     const initLoad = async () => {
@@ -193,11 +198,13 @@ export default function EstatesOfficerDashboard() {
 
     initLoad();
     return () => { isMounted = false; };
-  }, []); // Only run once on mount
+  }, [fetchQueueData, fetchTechsData, statusFilter, priorityFilter, categoryFilter, search]); // Only run once on mount
 
   // ── Refetch technicians when category changes ──────────────────────────────────
 
   useEffect(() => {
+    // This effect intentionally triggers a fetch when the selected category changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTechsData(categoryFilter !== 'all' ? categoryFilter : null);
   }, [categoryFilter, fetchTechsData]);
 
@@ -222,8 +229,39 @@ export default function EstatesOfficerDashboard() {
   useEffect(() => {
     if (page === 1) return; // Skip: already handled by filter effect or initial load
     
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchQueueData(page, { statusFilter, priorityFilter, categoryFilter, search });
-  }, [page, fetchQueueData]);
+  }, [page, statusFilter, priorityFilter, categoryFilter, search, fetchQueueData]);
+
+  // ── Refresh queue when an external task or workflow event occurs ──────────
+  useEffect(() => {
+    const handleQueueUpdated = () => {
+      fetchQueueData(page, { statusFilter, priorityFilter, categoryFilter, search });
+      managementService.getDashboardStats().then((r) => {
+        if (r.success) setStats(r.data);
+      });
+    };
+
+    const handleStorageEvent = (event) => {
+      if (event.key !== 'app-event' || !event.newValue) return;
+      try {
+        const payload = JSON.parse(event.newValue);
+        if (payload?.eventName === 'queueUpdated') {
+          handleQueueUpdated();
+        }
+      } catch (error) {
+        console.warn('Invalid app-event payload', error);
+      }
+    };
+
+    window.addEventListener('queueUpdated', handleQueueUpdated);
+    window.addEventListener('storage', handleStorageEvent);
+
+    return () => {
+      window.removeEventListener('queueUpdated', handleQueueUpdated);
+      window.removeEventListener('storage', handleStorageEvent);
+    };
+  }, [fetchQueueData, page, statusFilter, priorityFilter, categoryFilter, search]);
 
   // ── handle complaint update from drawer ────────────────────────────────────
 
@@ -236,43 +274,30 @@ export default function EstatesOfficerDashboard() {
 
   // const handleLogout = () => authService.logoutAndRedirect?.(); // not used
 
-  // ── derived stats from current complaints list ─────────────────────────────
-  const slaBreaching = complaints.filter((c) => c.slaDeadline && new Date(c.slaDeadline) < new Date() && c.status !== 'closed').length;
-
   return (
     <div className="min-h-screen bg-white">
       {/* ── Shared Header ── */}
       <Header onHamburgerClick={() => {}} />
 
-      {/* ── Content Header ── */}
-      <div className="sticky top-[76px] z-30 bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
-        <div className="max-w-screen-2xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">Management Queue</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Oversee complaints and workflow</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {slaBreaching > 0 && (
-              <div className="flex items-center gap-1.5 bg-rose-100 border border-rose-300 rounded-full px-3 py-1 text-xs text-rose-800 font-medium">
-                <AlertTriangle className="h-3 w-3" />
-                {slaBreaching} SLA {slaBreaching > 1 ? 'breaches' : 'breach'}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
       <main className="max-w-screen-2xl mx-auto px-4 md:px-6 py-5">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+          <h1 className="text-[#1e2937] mb-2" style={{ fontFamily: 'Merriweather, serif', fontSize: '24px', fontWeight: 700 }}>
+            Management Queue
+          </h1>
+          <p className="text-[#475569]" style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px' }}>
+            Oversee complaints and workflow
+          </p>
+        </motion.div>
         <StatsRow stats={stats} />
 
         {/* ── Tabs ── */}
         <Tabs defaultValue="queue">
           <div className="flex items-center justify-between mb-3 gap-3">
-            <TabsList className="bg-white border border-slate-200 shadow-sm h-9 shrink-0">
-              <TabsTrigger value="queue" className="data-[state=active]:bg-[#1e3a5f] data-[state=active]:text-white h-7 px-4 text-sm">
+            <TabsList className="bg-white border border-slate-200 shadow-none rounded-none h-9 shrink-0">
+              <TabsTrigger value="queue" className="data-[state=active]:bg-[#1e3a5f] data-[state=active]:text-white h-7 px-4 text-sm rounded-none">
                 <Layers className="h-3.5 w-3.5 mr-1.5" />Queue
               </TabsTrigger>
-              <TabsTrigger value="analytics" className="data-[state=active]:bg-[#1e3a5f] data-[state=active]:text-white h-7 px-4 text-sm">
+              <TabsTrigger value="analytics" className="data-[state=active]:bg-[#1e3a5f] data-[state=active]:text-white h-7 px-4 text-sm rounded-none">
                 <BarChart3 className="h-3.5 w-3.5 mr-1.5" />Analytics
               </TabsTrigger>
             </TabsList>
@@ -295,9 +320,11 @@ export default function EstatesOfficerDashboard() {
           </TabsContent>
 
           <TabsContent value="analytics" className="m-0">
-            <Card className="border-slate-200 shadow-sm">
-              <AnalyticsTab stats={stats} complaints={complaints} />
-            </Card>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+              <Card className="border-slate-200 shadow-none rounded-none">
+                <AnalyticsTab stats={stats} complaints={complaints} />
+              </Card>
+            </motion.div>
           </TabsContent>
         </Tabs>
       </main>

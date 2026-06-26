@@ -19,13 +19,30 @@ export function TaskDetail() {
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [submitting, setSubmitting] = useState(false);// need to track submission state for actions like start work, resolve, or pending
+  const [submitting, setSubmitting] = useState(false); // need to track submission state for actions like start work, resolve, or pending
   const [taskStatus, setTaskStatus] = useState(null);
   const [showWorkReport, setShowWorkReport] = useState(false);
   const [showIssueNotes, setShowIssueNotes] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationType, setConfirmationType] = useState('resolved');
   const [confirmationData, setConfirmationData] = useState(null);
+
+  const emitAppEvent = (eventName) => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.dispatchEvent(new Event(eventName));
+    } catch (error) {
+      console.warn('Unable to dispatch event', eventName, error);
+    }
+
+    try {
+      const payload = JSON.stringify({ eventName, timestamp: Date.now() });
+      window.localStorage.setItem('app-event', payload);
+      window.localStorage.removeItem('app-event');
+    } catch {
+      // ignore localStorage failures
+    }
+  };
 
   // Fetch task details on mount
   useEffect(() => {
@@ -67,7 +84,11 @@ export function TaskDetail() {
         taskId,
         { status: 'in_progress' }
       );
-      setTaskStatus('In Progress');
+      const newStatus = technicianService.mapStatusToDisplay('in_progress');
+      setTask((prev) => prev ? { ...prev, status: 'in_progress', displayStatus: newStatus } : prev);
+      setTaskStatus(newStatus);
+      emitAppEvent('notificationsUpdated');
+      emitAppEvent('queueUpdated');
       toast.success('Task status updated to In Progress');
     } catch (err) {
       console.error('Error updating task:', err);
@@ -91,8 +112,11 @@ export function TaskDetail() {
           workReport: report,
         }
       );
-      
-      setTaskStatus('Resolved');
+      const newStatus = technicianService.mapStatusToDisplay('done');
+      setTask((prev) => prev ? { ...prev, status: 'done', displayStatus: newStatus, workReport: report } : prev);
+      setTaskStatus(newStatus);
+      emitAppEvent('notificationsUpdated');
+      emitAppEvent('queueUpdated');
       setConfirmationType('resolved');
       setConfirmationData(report);
       setShowWorkReport(false);
@@ -120,8 +144,11 @@ export function TaskDetail() {
           pendingInfo: notes,
         }
       );
-      
-      setTaskStatus('Pending');
+      const newStatus = technicianService.mapStatusToDisplay('blocked');
+      setTask((prev) => prev ? { ...prev, status: 'blocked', displayStatus: newStatus, pendingInfo: { ...prev.pendingInfo, ...notes } } : prev);
+      setTaskStatus(newStatus);
+      emitAppEvent('notificationsUpdated');
+      emitAppEvent('queueUpdated');
       setConfirmationType('pending');
       setConfirmationData(notes);
       setShowIssueNotes(false);
@@ -311,24 +338,27 @@ export function TaskDetail() {
                 {taskStatus === 'Assigned' && (
                   <button
                     onClick={handleStartWork}
-                    className="px-6 py-3 bg-[#1e3a5f] text-white hover:bg-[#2d4a6f] transition-colors"
+                    disabled={submitting}
+                    className="px-6 py-3 bg-[#1e3a5f] text-white hover:bg-[#2d4a6f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ fontSize: '14px', fontWeight: 500 }}
                   >
-                    Start Work
+                    {submitting ? 'Starting...' : 'Start Work'}
                   </button>
                 )}
                 {taskStatus === 'In Progress' && (
                   <>
                     <button
                       onClick={() => setShowWorkReport(true)}
-                      className="px-6 py-3 bg-[#059669] text-white hover:bg-[#047857] transition-colors"
+                      disabled={submitting}
+                      className="px-6 py-3 bg-[#059669] text-white hover:bg-[#047857] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ fontSize: '14px', fontWeight: 500 }}
                     >
                       Resolve Task
                     </button>
                     <button
                       onClick={() => setShowIssueNotes(true)}
-                      className="px-6 py-3 border border-[#e2e8f0] text-[#475569] hover:bg-[#f8fafc] transition-colors"
+                      disabled={submitting}
+                      className="px-6 py-3 border border-[#e2e8f0] text-[#475569] hover:bg-[#f8fafc] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ fontSize: '14px', fontWeight: 500 }}
                     >
                       Report Issue

@@ -60,17 +60,48 @@ const sendEmail = async ({ to, subject, html, text }) => {
     return null;
   }
 
+  if (!to) {
+    console.warn('No recipient specified for email; skipping send.');
+    return null;
+  }
+
+  const isValidEmail = (email) => {
+    if (!email || typeof email !== 'string') return false;
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email.trim());
+  };
+
+  let recipients = [];
+  if (Array.isArray(to)) {
+    recipients = to.filter(isValidEmail);
+  } else {
+    recipients = String(to)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(isValidEmail);
+  }
+
+  if (recipients.length === 0) {
+    console.warn('No valid recipient emails; skipping send. Original to:', to);
+    return null;
+  }
+
   const message = {
     from: getDefaultFrom(),
-    to,
+    to: recipients.join(', '),
     subject,
     html,
     text,
   };
 
-  const info = await transporter.sendMail(message);
-  console.info('Email sent:', info.messageId);
-  return info;
+  try {
+    const info = await transporter.sendMail(message);
+    console.info('Email sent:', info.messageId);
+    return info;
+  } catch (err) {
+    console.warn('Email send failed:', err.message);
+    return null;
+  }
 };
 
 const buildBaseTemplate = ({ title, body, actionLabel, actionUrl }) => {

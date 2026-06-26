@@ -303,7 +303,7 @@ export default function ComplaintDashboard() {
         setLoading(true);
         const result = await complaintService.getMyComplaints({
           page,
-          limit: 10,
+          limit: 5,
           status: statusVal,
           category: categoryVal,
           timeRange: timeRangeVal,
@@ -361,7 +361,7 @@ export default function ComplaintDashboard() {
 
     initLoad();
     return () => { isMounted = false; };
-  }, []); // Only on mount
+  }, [refreshDashboardStats, refreshComplaints]); // Only on mount
 
   // ── Debounced fetch when filters change ────────────────────────────────────────
 
@@ -391,6 +391,7 @@ export default function ComplaintDashboard() {
   useEffect(() => {
     if (pagination.currentPage === 1) return; // Skip: already fetched by filter effect
     
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshComplaints(pagination.currentPage, statusFilter, categoryFilter, timeFilter, customStartDate, customEndDate, searchQuery);
   }, [pagination.currentPage, statusFilter, categoryFilter, timeFilter, customStartDate, customEndDate, searchQuery, refreshComplaints]);
 
@@ -465,6 +466,7 @@ export default function ComplaintDashboard() {
         await new Promise((resolve) => setTimeout(resolve, 500));
         await refreshDashboardStats('all', '', '');
         await refreshComplaints(1, 'all', 'all', 'all', '', '', '');
+        window.dispatchEvent(new Event('notificationsUpdated'));
       } else {
         setErrorMessage(result.error || 'Unable to submit complaint.');
         setServerErrors(result.validationErrors);

@@ -11,6 +11,7 @@ import {
   getDashboardStats,
   performQualityCheck,
   scheduleInspection,
+  requestResidentApproval,
   recordResidentApproval,
   requestRework,
   escalateComplaint,
@@ -113,6 +114,15 @@ const scheduleInspectionValidation = [
     .withMessage('Invalid inspection notes'),
 ];
 
+const requestApprovalValidation = [
+  param('id').isMongoId().withMessage('Invalid complaint ID'),
+  body('message')
+    .optional()
+    .isString()
+    .isLength({ max: 500 })
+    .withMessage('Message must be a string with max 500 characters'),
+];
+
 const residentApprovalValidation = [
   param('id').isMongoId().withMessage('Invalid complaint ID'),
   body('approvalStatus')
@@ -193,8 +203,8 @@ const createTaskValidation = [
   body('estimatedDurationDays')
     .notEmpty()
     .withMessage('Estimated duration (in days) is required')
-    .isFloat({ min: 0.25 })
-    .withMessage('Duration must be at least 0.25 days'),
+    .isInt({ min: 1 })
+    .withMessage('Duration must be a whole number of days (minimum 1)'),
   body('startDate')
     .optional()
     .isISO8601()
@@ -221,6 +231,21 @@ const assignTaskValidation = [
 
 // All routes require authentication
 router.use(protect);
+
+// Request resident approval - Officer initiates (before admin-only middleware)
+router.post(
+  '/:id/request-approval',
+  authorize('admin', 'estates_officer'),
+  requestApprovalValidation,
+  requestResidentApproval
+);
+
+// Resident Approval can be done by resident, admin, or estates officer
+router.put(
+  '/:id/resident-approval',
+  residentApprovalValidation,
+  recordResidentApproval
+);
 
 // Admin/Estates Officer only routes
 router.use(authorize('admin', 'estates_officer'));
@@ -253,13 +278,6 @@ router.post(
   '/:id/schedule-inspection',
   scheduleInspectionValidation,
   scheduleInspection
-);
-
-// Resident Approval (can be done by resident too)
-router.put(
-  '/:id/resident-approval',
-  residentApprovalValidation,
-  recordResidentApproval
 );
 
 // Rework & Escalation

@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 import { TechnicianDashboard } from './pages/TechnicianDashboard';
 import { TaskDetail } from './pages/TaskDetail';
 import { ComplaintDetailPage } from './pages/ComplaintDetailPage';
+import NotificationsPage from './pages/NotificationsPage';
 import authService from './services/api';
 import { getRoleRedirectPath } from './hooks/useRoleRedirect';
 
@@ -49,6 +50,7 @@ function App() {
           <Route path="/dashboard" element={<ProtectedRoute><ComplaintDashboard /></ProtectedRoute>} />
           <Route path="/complaints" element={<ProtectedRoute><ComplaintDashboard /></ProtectedRoute>} />
           <Route path="/complaints/:complaintId" element={<ProtectedRoute><ComplaintDetailPage /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 
           {/* Root: redirect to role-specific dashboard when authenticated */}
           <Route

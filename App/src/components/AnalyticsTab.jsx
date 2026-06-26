@@ -30,7 +30,7 @@ export default function AnalyticsTab({ stats, complaints }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 p-5">
-      <Card className="lg:col-span-1 border-slate-200">
+      <Card className="lg:col-span-1 border-slate-200 shadow-none rounded-none">
         <CardHeader className="pb-2 px-4 pt-4">
           <CardTitle className="text-sm font-semibold text-slate-700">By Priority</CardTitle>
         </CardHeader>
@@ -41,15 +41,15 @@ export default function AnalyticsTab({ stats, complaints }) {
                 <span className="text-slate-600 font-medium">{label}</span>
                 <span className="text-slate-500">{count}</span>
               </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${(count / maxBar) * 100}%` }} />
+              <div className="h-2 bg-slate-100 overflow-hidden">
+                <div className={`h-full ${color} transition-all`} style={{ width: `${(count / maxBar) * 100}%` }} />
               </div>
             </div>
           ))}
         </CardContent>
       </Card>
 
-      <Card className="lg:col-span-1 border-slate-200">
+      <Card className="lg:col-span-1 border-slate-200 shadow-none rounded-none">
         <CardHeader className="pb-2 px-4 pt-4">
           <CardTitle className="text-sm font-semibold text-slate-700">By Status</CardTitle>
         </CardHeader>
@@ -67,7 +67,7 @@ export default function AnalyticsTab({ stats, complaints }) {
       </Card>
 
       <div className="space-y-4">
-        <Card className="border-slate-200">
+        <Card className="border-slate-200 shadow-none rounded-none">
           <CardHeader className="pb-2 px-4 pt-4">
             <CardTitle className="text-sm font-semibold text-slate-700">Task Summary</CardTitle>
           </CardHeader>
@@ -77,7 +77,7 @@ export default function AnalyticsTab({ stats, complaints }) {
               { label: 'Done', value: taskStats.done, cls: 'text-emerald-600' },
               { label: 'Overdue', value: taskStats.overdue, cls: 'text-rose-600' },
             ].map(({ label, value, cls }) => (
-              <div key={label} className="text-center bg-slate-50 rounded-lg p-2 border border-slate-100">
+              <div key={label} className="text-center bg-slate-50 p-2 border border-slate-100 rounded-none">
                 <p className={`text-xl font-bold ${cls}`}>{value}</p>
                 <p className="text-xs text-slate-500">{label}</p>
               </div>
@@ -85,7 +85,7 @@ export default function AnalyticsTab({ stats, complaints }) {
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200">
+        <Card className="border-slate-200 shadow-none rounded-none">
           <CardHeader className="pb-2 px-4 pt-4">
             <CardTitle className="text-sm font-semibold text-slate-700">By Category</CardTitle>
           </CardHeader>
@@ -93,14 +93,14 @@ export default function AnalyticsTab({ stats, complaints }) {
             {Object.entries(byCategory).map(([cat, count]) => (
               <div key={cat} className="flex justify-between items-center text-xs">
                 <span className="text-slate-600">{cat}</span>
-                <span className="font-semibold text-[#1e3a5f] bg-[#eef2f7] px-2 py-0.5 rounded-full">{count}</span>
+                <span className="font-semibold text-[#1e3a5f] bg-[#eef2f7] px-2 py-0.5 rounded-none border border-slate-200">{count}</span>
               </div>
             ))}
           </CardContent>
         </Card>
       </div>
 
-      <Card className="lg:col-span-3 border-slate-200">
+      <Card className="lg:col-span-3 border-slate-200 shadow-none rounded-none">
         <CardHeader className="pb-2 px-4 pt-4">
           <CardTitle className="text-sm font-semibold text-slate-700">SLA &amp; Performance</CardTitle>
         </CardHeader>
@@ -111,7 +111,7 @@ export default function AnalyticsTab({ stats, complaints }) {
             { label: 'Avg Resolution', value: `${Number(stats.avgTimeToResolveHours ?? 0).toFixed(0)}h`, cls: 'text-[#1e3a5f]' },
             { label: 'Closed', value: stats.statusBreakdown?.closed ?? 0, cls: 'text-emerald-600' },
           ].map(({ label, value, cls }) => (
-            <div key={label} className="text-center bg-slate-50 rounded-lg p-3 border border-slate-100">
+            <div key={label} className="text-center bg-slate-50 p-3 border border-slate-100 rounded-none">
               <p className={`text-2xl font-bold ${cls}`}>{value}</p>
               <p className="text-xs text-slate-500 mt-0.5">{label}</p>
             </div>

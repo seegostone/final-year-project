@@ -69,6 +69,8 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
                     Actions Taken <span className="text-red-600">*</span>
                   </label>
                   <textarea
+                    id="actionsTaken"
+                    name="actionsTaken"
                     required
                     value={actionsTaken}
                     onChange={(e) => setActionsTaken(e.target.value)}
@@ -89,6 +91,8 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
                   </label>
                   <div className="flex gap-2 mb-3">
                     <input
+                      id="currentMaterial"
+                      name="currentMaterial"
                       type="text"
                       value={currentMaterial}
                       onChange={(e) => setCurrentMaterial(e.target.value)}
@@ -132,6 +136,8 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
                     Hours Spent <span className="text-red-600">*</span>
                   </label>
                   <input
+                    id="hoursSpent"
+                    name="hoursSpent"
                     type="number"
                     required
                     step="0.5"
@@ -149,6 +155,8 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
                     Additional Notes (optional)
                   </label>
                   <textarea
+                    id="additionalNotes"
+                    name="additionalNotes"
                     value={additionalNotes}
                     onChange={(e) => setAdditionalNotes(e.target.value)}
                     rows={2}

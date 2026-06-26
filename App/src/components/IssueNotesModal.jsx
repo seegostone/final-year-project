@@ -55,6 +55,8 @@ export function IssueNotesModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
                     Parts Needed <span className="text-red-600">*</span>
                   </label>
                   <textarea
+                    id="partsNeeded"
+                    name="partsNeeded"
                     required
                     value={partsNeeded}
                     onChange={(e) => setPartsNeeded(e.target.value)}
@@ -70,6 +72,8 @@ export function IssueNotesModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
                     Delay Reason <span className="text-red-600">*</span>
                   </label>
                   <textarea
+                    id="delayReason"
+                    name="delayReason"
                     required
                     value={delayReason}
                     onChange={(e) => setDelayReason(e.target.value)}
@@ -85,6 +89,8 @@ export function IssueNotesModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
                     Estimated Resolution Time (optional)
                   </label>
                   <input
+                    id="estimatedDays"
+                    name="estimatedDays"
                     type="number"
                     min="1"
                     value={estimatedDays}

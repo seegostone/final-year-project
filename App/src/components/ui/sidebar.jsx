@@ -1,4 +1,3 @@
-import * as React from "react";
 import { useIsMobile } from "./use-mobile";
 
 export default function Sidebar({ children }) {

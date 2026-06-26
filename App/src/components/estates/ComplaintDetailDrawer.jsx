@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { motion } from 'motion/react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet.jsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs.jsx';
 import { Button } from '../ui/button.jsx';
@@ -7,15 +8,18 @@ import { Alert, AlertDescription } from '../ui/alert.jsx';
 import {
   AlertTriangle, CheckCircle2, Clock, User, MapPin, Tag, Calendar,
   Wrench, Plus, AlertCircle, ChevronRight, RotateCcw, TrendingUp,
-  ClipboardList, History, RefreshCw, Loader2,
+  ClipboardList, History, RefreshCw, Loader2, Zap,
 } from 'lucide-react';
 import {
   DefineScopeModal, CreateTaskModal, AssignTaskModal,
   RequestReworkModal, EscalateModal, CloseComplaintModal,
+  RequestApprovalModal, AssessPrioritizeModal,
 } from './EstatesModals';
 import managementService from '../../services/managementApi';
 import complaintService from '../../services/complaintsApi';
-import axiosInstance from '../../services/axios';import { emitTaskUnassigned } from '../../utils/eventBus';
+import authService from '../../services/api';
+import axiosInstance from '../../services/axios';
+import { emitTaskUnassigned } from '../../utils/eventBus';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(iso) {
@@ -42,6 +46,7 @@ const STATUS_COLORS = {
   pending: 'bg-slate-100 text-slate-700 border-slate-300',
   triaged: 'bg-blue-100 text-blue-700 border-blue-300',
   scope_defined: 'bg-indigo-100 text-indigo-700 border-indigo-300',
+  validated: 'bg-sky-100 text-sky-700 border-sky-300',
   assigned: 'bg-cyan-100 text-cyan-700 border-cyan-300',
   'in-progress': 'bg-violet-100 text-violet-700 border-violet-300',
   rework_required: 'bg-amber-100 text-amber-700 border-amber-300',
@@ -51,9 +56,16 @@ const STATUS_COLORS = {
 };
 
 const STATUS_LABELS = {
-  pending: 'Pending', triaged: 'Triaged', analyzed: 'Analyzed',
-  scope_defined: 'Scoped', assigned: 'Assigned', 'in-progress': 'In Progress',
-  rework_required: 'Rework', escalated: 'Escalated', closed: 'Closed',
+  pending: 'Pending',
+  triaged: 'Triaged',
+  analyzed: 'Analyzed',
+  scope_defined: 'Scoped',
+  validated: 'Validated',
+  assigned: 'Assigned',
+  'in-progress': 'In Progress',
+  rework_required: 'Rework',
+  escalated: 'Escalated',
+  closed: 'Closed',
 };
 
 const TASK_STATUS_DISPLAY = {
@@ -71,12 +83,12 @@ function TaskDeadlineChip({ task }) {
     return <span className="inline-flex items-center gap-1 text-xs text-emerald-700 whitespace-nowrap"><CheckCircle2 className="h-3 w-3" />Done</span>;
   }
   if (overdue) {
-    return <span className="inline-flex items-center gap-1 text-xs text-rose-700 font-semibold whitespace-nowrap"><AlertTriangle className="h-3 w-3" />Overdue {days !== null ? Math.abs(days).toFixed(1) : ''}d</span>;
+    return <span className="inline-flex items-center gap-1 text-xs text-rose-700 font-semibold whitespace-nowrap"><AlertTriangle className="h-3 w-3" />Overdue {days !== null ? Math.ceil(Math.abs(days)) : ''}d</span>;
   }
   if (days !== null && days < 1) {
     return <span className="inline-flex items-center gap-1 text-xs text-orange-600 font-semibold whitespace-nowrap"><Clock className="h-3 w-3" />&lt;24h left</span>;
   }
-  return <span className="inline-flex items-center gap-1 text-xs text-slate-500 whitespace-nowrap"><Calendar className="h-3 w-3" />{days !== null ? days.toFixed(1) : '—'}d left</span>;
+  return <span className="inline-flex items-center gap-1 text-xs text-slate-500 whitespace-nowrap"><Calendar className="h-3 w-3" />{days !== null ? Math.ceil(days) : '—'}d left</span>;
 }
 
 // ─── Drawer ───────────────────────────────────────────────────────────────────
@@ -86,6 +98,12 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
   const [selectedTask, setSelectedTask] = useState(null);
   const [apiError, setApiError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [approvalStatus, setApprovalStatus] = useState('ACCEPTED');
+  const [satisfactionRating, setSatisfactionRating] = useState(5);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [feedbackError, setFeedbackError] = useState(null);
+  const [feedbackSuccess, setFeedbackSuccess] = useState(null);
 
   const refreshComplaintData = useCallback(async () => {
     if (!complaint || !complaint._id) return null;
@@ -112,11 +130,25 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
   const scopeTotal = complaint.scopeDefinition?.estimatedDuration ?? 0;
   const scopePercent = scopeTotal > 0 ? Math.min(100, (scopeUsed / scopeTotal) * 100) : 0;
 
+  const currentUser = authService.getCurrentUserFromStorage();
+  const currentUserId = currentUser?._id || currentUser?.id || null;
+  const isSubmitter = currentUserId && complaint.userId?.toString() === currentUserId.toString();
+  const residentValidation = complaint.residentValidation || null;
+  const canSubmitResidentFeedback =
+    isSubmitter &&
+    complaint.status === 'resolved' &&
+    residentValidation?.isPending &&
+    !residentValidation?.status;
+  const canAssessPrioritize = complaint.status === 'pending' && !complaint.priority;
   const canDefineScope = ['pending', 'triaged', 'analyzed'].includes(complaint.status) && !complaint.scopeDefinition;
   const canCreateTask = !!complaint.scopeDefinition && !['closed'].includes(complaint.status);
   const canRework = ['in-progress', 'assigned', 'scope_defined'].includes(complaint.status) && (complaint.reworkCount ?? 0) < 2;
   const canEscalate = !['closed', 'escalated'].includes(complaint.status);
   const canClose = !['closed', 'pending'].includes(complaint.status);
+  
+  // Request Approval only if: resolved status + all tasks are done
+  const allTasksDone = (complaint.tasks ?? []).length > 0 && (complaint.tasks ?? []).every(t => t.status === 'done');
+  const canRequestApproval = complaint.status === 'resolved' && allTasksDone && !residentValidation?.isPending && !residentValidation?.status;
 
   const badgePriority = complaint.priority ?? null;
   const rawImagePath = complaint.attachments?.[0]?.url ?? complaint.imageData ?? null;
@@ -149,6 +181,49 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleSubmitResidentFeedback = async () => {
+    setFeedbackError(null);
+    setFeedbackSuccess(null);
+
+    if (approvalStatus === 'REJECTED' && !rejectionReason.trim()) {
+      setFeedbackError('Please provide a rejection reason.');
+      return;
+    }
+
+    const payload = {
+      approvalStatus,
+      satisfactionRating: Number(satisfactionRating) || 0,
+      feedback: feedbackText.trim(),
+      rejectionReason: approvalStatus === 'REJECTED' ? rejectionReason.trim() : undefined,
+    };
+
+    const res = await callApi(
+      () => managementService.recordResidentApproval(complaint._id, payload),
+      null,
+      () => {
+        setFeedbackSuccess('Your feedback has been submitted.');
+      }
+    );
+
+    if (!res.success) {
+      setFeedbackError(res.error || 'Failed to submit feedback.');
+    }
+  };
+
+  const handleAssessPrioritize = async (priority, notes) => {
+    await callApi(
+      () => managementService.assessPrioritizeComplaint(complaint._id, {
+        priority,
+        triageNotes: notes,
+      }),
+      () => ({
+        ...complaint,
+        status: 'triaged',
+        priority,
+      })
+    );
   };
 
   const handleDefineScope = async (_id, data) => {
@@ -264,14 +339,29 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
     );
   };
 
+  const handleRequestApproval = async (_id, data) => {
+    await callApi(
+      () => managementService.requestResidentApproval(_id, data),
+      () => ({
+        ...complaint,
+        residentValidation: {
+          ...complaint.residentValidation,
+          isPending: true,
+          requestedAt: new Date().toISOString(),
+          requestMessage: data.message,
+        },
+      })
+    );
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <>
       <Sheet open={!!complaint} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="right" className="w-full sm:max-w-xl lg:max-w-2xl flex flex-col overflow-hidden p-0">
+        <SheetContent side="right" className="w-full sm:max-w-xl lg:max-w-2xl flex flex-col overflow-hidden p-0 border-l border-slate-200 bg-white">
           {/* Header */}
-          <div className="bg-[#e8fbf4] text-slate-900 px-5 py-4 shrink-0 border-b border-slate-200">
+          <div className="bg-white text-slate-900 px-5 py-4 shrink-0 border-b border-slate-200">
             <SheetHeader>
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
@@ -315,46 +405,60 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
 
             {/* Action toolbar */}
             <div className="flex flex-wrap gap-1.5 mt-3">
+              {canAssessPrioritize && (
+                <Button size="sm" variant="outline"
+                  className="h-7 text-xs rounded-none border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                  onClick={() => setActiveModal('assessPrioritize')} disabled={actionLoading}>
+                  <Zap className="h-3 w-3 mr-1" />Assess & Prioritize
+                </Button>
+              )}
               {canDefineScope && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs rounded-md border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100"
+                  className="h-7 text-xs rounded-none border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100"
                   onClick={() => setActiveModal('scope')} disabled={actionLoading}>
                   <ClipboardList className="h-3 w-3 mr-1" />Define Scope
                 </Button>
               )}
               {canCreateTask && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs rounded-md border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100"
+                  className="h-7 text-xs rounded-none border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100"
                   onClick={() => setActiveModal('createTask')} disabled={actionLoading}>
                   <Plus className="h-3 w-3 mr-1" />New Task
                 </Button>
               )}
               {canRework && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs rounded-md border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  className="h-7 text-xs rounded-none border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
                   onClick={() => setActiveModal('rework')} disabled={actionLoading}>
                   <RotateCcw className="h-3 w-3 mr-1" />Rework
                 </Button>
               )}
               {canEscalate && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs rounded-md border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                  className="h-7 text-xs rounded-none border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
                   onClick={() => setActiveModal('escalate')} disabled={actionLoading}>
                   <TrendingUp className="h-3 w-3 mr-1" />Escalate
                 </Button>
               )}
               {canClose && (
                 <Button size="sm" variant="outline"
-                  className="h-7 text-xs rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  className="h-7 text-xs rounded-none border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                   onClick={() => setActiveModal('close')} disabled={actionLoading}>
                   <CheckCircle2 className="h-3 w-3 mr-1" />Close
+                </Button>
+              )}
+              {canRequestApproval && (
+                <Button size="sm" variant="outline"
+                  className="h-7 text-xs rounded-none border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+                  onClick={() => setActiveModal('requestApproval')} disabled={actionLoading}>
+                  <CheckCircle2 className="h-3 w-3 mr-1" />Request Approval
                 </Button>
               )}
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="flex-1 overflow-y-auto">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }} className="flex-1 overflow-y-auto">
             <Tabs defaultValue="details">
               <TabsList className="w-full rounded-none border-b h-11 bg-white justify-start px-2 gap-0">
                 {[
@@ -389,7 +493,7 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                     { icon: User, label: 'Submitted by', value: complaint.user?.name ?? complaint.history?.find((h) => h.action === 'submitted')?.byName ?? '—' },
                     { icon: Calendar, label: 'Date submitted', value: formatDate(complaint.createdAt) },
                   ].map(({ icon: Icon, label, value }) => (
-                    <div key={label} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                    <div key={label} className="bg-slate-50 rounded-none p-3 border border-slate-100">
                       <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
                         <Icon className="h-3 w-3" />{label}
                       </div>
@@ -400,19 +504,19 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
 
                 <div>
                   <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Description</h4>
-                  <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-lg p-3 border border-slate-100">
+                  <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-none p-3 border border-slate-100">
                     {complaint.description}
                   </p>
                 </div>
 
                 {attachmentUrl && (
-                  <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+                  <div className="overflow-hidden border border-slate-200 bg-white shadow-none rounded-none">
                     <img src={attachmentUrl} alt="Complaint attachment" className="w-full h-auto object-contain" />
                   </div>
                 )}
 
                 {complaint.slaDeadline && (
-                  <div className={`rounded-lg p-3 border ${new Date(complaint.slaDeadline) < new Date() ? 'bg-rose-50 border-rose-200' : 'bg-sky-50 border-sky-200'}`}>
+                  <div className={`p-3 border rounded-none ${new Date(complaint.slaDeadline) < new Date() ? 'bg-rose-50 border-rose-200' : 'bg-sky-50 border-sky-200'}`}>
                     <div className="flex items-center gap-2">
                       {new Date(complaint.slaDeadline) < new Date()
                         ? <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
@@ -430,7 +534,7 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                 {complaint.scopeDefinition ? (
                   <div>
                     <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Scope Definition</h4>
-                    <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100 space-y-2">
+                    <div className="bg-indigo-50 rounded-none p-3 border border-indigo-100 space-y-2">
                       <p className="text-sm text-slate-700">{complaint.scopeDefinition.description}</p>
                       <div className="flex flex-wrap gap-3 text-xs">
                         <span className="text-indigo-700 font-medium">⏱ {complaint.scopeDefinition.estimatedDuration} days total</span>
@@ -439,14 +543,14 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                       {complaint.scopeDefinition.requiredSkills.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                           {complaint.scopeDefinition.requiredSkills.map((s) => (
-                            <span key={s} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-200">{s}</span>
+                            <span key={s} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-none border border-indigo-200">{s}</span>
                           ))}
                         </div>
                       )}
                       {totalTasks > 0 && (
                         <div>
                           <div className="flex justify-between text-xs mb-1">
-                            <span className="text-slate-600">Scope used: {scopeUsed.toFixed(1)} / {scopeTotal} days</span>
+                            <span className="text-slate-600">Scope used: {scopeUsed} / {scopeTotal} days</span>
                             <span className={scopePercent > 90 ? 'text-rose-600 font-semibold' : 'text-slate-500'}>{scopePercent.toFixed(0)}%</span>
                           </div>
                           <Progress value={scopePercent} className="h-1.5" />
@@ -455,7 +559,7 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded-lg p-4 text-center">
+                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded-none p-4 text-center">
                     <ClipboardList className="h-8 w-8 text-slate-300 mx-auto mb-2" />
                     <p className="text-sm text-slate-500">Scope not yet defined</p>
                     {canDefineScope && (
@@ -466,10 +570,145 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                   </div>
                 )}
 
+                {(canSubmitResidentFeedback || residentValidation?.isPending || residentValidation?.status) && (
+                  <div className="border border-slate-200 bg-white p-4 shadow-none rounded-none">
+                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Submitter feedback</h4>
+                    {residentValidation?.isPending && !residentValidation?.status && !isSubmitter && (
+                      // Officer view: awaiting resident response
+                      <div className="space-y-3">
+                        <div className="rounded-none border border-sky-100 bg-sky-50 p-3">
+                          <p className="text-xs uppercase tracking-wide text-sky-600 font-semibold">Status</p>
+                          <p className="mt-1 text-sm font-semibold text-sky-700">⏳ Awaiting Resident Approval</p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">Requested</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">
+                              {residentValidation?.requestedAt ? formatDateTime(residentValidation.requestedAt) : '—'}
+                            </p>
+                          </div>
+                          <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">Requested by</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation?.requestedBy?.name ?? '—'}</p>
+                          </div>
+                        </div>
+                        {residentValidation?.requestMessage && (
+                          <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">Message</p>
+                            <p className="mt-1 text-sm text-slate-700">{residentValidation.requestMessage}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {residentValidation ? (
+                      !residentValidation?.isPending && (
+                        // Show feedback results when it's been submitted
+                        <div className="space-y-3">
+                          <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">Feedback status</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation.status}</p>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                              <p className="text-xs uppercase tracking-wide text-slate-500">Rating</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation.satisfactionRating}/5</p>
+                            </div>
+                            <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                              <p className="text-xs uppercase tracking-wide text-slate-500">Submitted</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation.completedAt ? formatDateTime(residentValidation.completedAt) : '—'}</p>
+                            </div>
+                          </div>
+                          {residentValidation.feedback && (
+                            <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                              <p className="text-xs uppercase tracking-wide text-slate-500">Resident comments</p>
+                              <p className="mt-1 text-sm text-slate-700 whitespace-pre-line">{residentValidation.feedback}</p>
+                            </div>
+                          )}
+                          {residentValidation.status === 'REJECTED' && residentValidation.rejectionReason && (
+                            <div className="rounded-none border border-rose-100 bg-rose-50 p-3">
+                              <p className="text-xs uppercase tracking-wide text-rose-700">Rejection reason</p>
+                              <p className="mt-1 text-sm text-rose-800">{residentValidation.rejectionReason}</p>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    ) : (
+                      canSubmitResidentFeedback && (
+                        // Resident view: form to submit approval
+                        <div className="space-y-4">
+                          <p className="text-sm text-slate-600">Your complaint has been marked resolved. Please confirm whether the work is acceptable or request rework.</p>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <label className="block text-sm font-medium text-slate-700">
+                              Decision
+                              <select
+                                className="mt-2 block w-full rounded-none border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                                value={approvalStatus}
+                                onChange={(e) => setApprovalStatus(e.target.value)}
+                              >
+                                <option value="ACCEPTED">Accept</option>
+                                <option value="REJECTED">Request Rework</option>
+                                <option value="PARTIAL">Partial Acceptance</option>
+                              </select>
+                            </label>
+                            <label className="block text-sm font-medium text-slate-700">
+                              Satisfaction rating
+                              <select
+                                className="mt-2 block w-full rounded-none border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                                value={satisfactionRating}
+                                onChange={(e) => setSatisfactionRating(Number(e.target.value))}
+                              >
+                                {[5, 4, 3, 2, 1].map((value) => (
+                                  <option key={value} value={value}>{value} / 5</option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-slate-700">Comments</label>
+                            <textarea
+                              rows="4"
+                              className="w-full rounded-none border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                              value={feedbackText}
+                              onChange={(e) => setFeedbackText(e.target.value)}
+                              placeholder="Optional comments about the work done"
+                            />
+                          </div>
+                          {approvalStatus === 'REJECTED' && (
+                            <div className="space-y-2">
+                              <label className="block text-sm font-medium text-slate-700">Rejection reason</label>
+                              <textarea
+                                rows="3"
+                                className="w-full rounded-none border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                                value={rejectionReason}
+                                onChange={(e) => setRejectionReason(e.target.value)}
+                                placeholder="Tell us why you need rework"
+                              />
+                            </div>
+                          )}
+                          {feedbackError && (
+                            <p className="text-sm text-rose-600">{feedbackError}</p>
+                          )}
+                          {feedbackSuccess && (
+                            <p className="text-sm text-emerald-700">{feedbackSuccess}</p>
+                          )}
+                          <Button
+                            size="sm"
+                            className="bg-[#1e3a5f] hover:bg-[#16304f] text-white"
+                            onClick={handleSubmitResidentFeedback}
+                            disabled={actionLoading}
+                          >
+                            Submit feedback
+                          </Button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+
                 {complaint.assignment && (
                   <div>
                     <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Lead Assignment</h4>
-                    <div className="bg-cyan-50 rounded-lg p-3 border border-cyan-100 flex items-center gap-3">
+                    <div className="bg-cyan-50 rounded-none p-3 border border-cyan-100 flex items-center gap-3">
                       <div className="h-9 w-9 rounded-full bg-cyan-100 flex items-center justify-center shrink-0">
                         <User className="h-4 w-4 text-cyan-700" />
                       </div>
@@ -487,7 +726,7 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                 )}
 
                 {complaint.escalation && (
-                  <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                  <div className="bg-orange-50 rounded-none p-3 border border-orange-200">
                     <div className="flex items-center gap-2 mb-1">
                       <TrendingUp className="h-4 w-4 text-orange-600 shrink-0" />
                       <span className="text-sm font-semibold text-orange-800">Escalated</span>
@@ -499,7 +738,7 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                 )}
 
                 {(complaint.reworkCount ?? 0) > 0 && (
-                  <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                  <div className="bg-amber-50 rounded-none p-3 border border-amber-200">
                     <div className="flex items-center gap-2">
                       <RefreshCw className="h-4 w-4 text-amber-600 shrink-0" />
                       <span className="text-sm font-semibold text-amber-800">Rework Cycle {complaint.reworkCount}/2</span>
@@ -514,7 +753,7 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
               {/* ── Tasks Tab ── */}
               <TabsContent value="tasks" className="p-5 space-y-3 m-0">
                 {totalTasks > 0 && (
-                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 space-y-2">
+                  <div className="bg-slate-50 rounded-none p-3 border border-slate-100 space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-600">{completedTasks} of {totalTasks} tasks complete</span>
                       <span className="font-semibold text-[#1e3a5f]">{taskProgress}%</span>
@@ -548,21 +787,17 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                   <div className="space-y-2">
                     {tasks.map((task) => {
                       // Build readable task code: prefer stored `taskCode`, then `taskNumber` with complaint label, otherwise fallback to string id
-                      let displayTaskCode = null;
-                      if (task.taskCode) {
-                        displayTaskCode = task.taskCode;
-                      } else if (typeof task.taskNumber === 'number' || task.taskNumber) {
-                        const complaintLabel = complaint.complaintId || 'CMP-000';
-                        displayTaskCode = `${complaintLabel}-TASK-${String(task.taskNumber).padStart(3, '0')}`;
-                      } else {
-                        displayTaskCode = task._id?.toString();
-                      }
+                      const displayTaskCode = task.taskCode
+                        ? task.taskCode
+                        : (typeof task.taskNumber === 'number' || task.taskNumber)
+                          ? `${complaint.complaintId || 'CMP-000'}-TASK-${String(task.taskNumber).padStart(3, '0')}`
+                          : task._id?.toString();
                       const taskOverdue = task.deadline ? isOverdue(task.deadline, task.status) : false;
                       const ts = TASK_STATUS_DISPLAY[task.status] ?? { label: task.status, color: 'bg-slate-100 text-slate-600' };
                       return (
                         <div
                           key={task._id}
-                          className={`rounded-lg border p-3 transition-colors ${
+                          className={`rounded-none border p-3 transition-colors ${
                             taskOverdue ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-white hover:border-slate-300'
                           }`}
                         >
@@ -657,17 +892,19 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                 )}
               </TabsContent>
             </Tabs>
-          </div>
+          </motion.div>
         </SheetContent>
       </Sheet>
 
       {/* Modals */}
+      <AssessPrioritizeModal open={activeModal === 'assessPrioritize'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleAssessPrioritize} />
       <DefineScopeModal open={activeModal === 'scope'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleDefineScope} />
       <CreateTaskModal open={activeModal === 'createTask'} complaint={complaint} technicians={technicians} onClose={() => setActiveModal(null)} onSubmit={handleCreateTask} />
       <AssignTaskModal open={activeModal === 'assignTask'} task={selectedTask} complaint={complaint} technicians={technicians}
         onClose={() => { setActiveModal(null); setSelectedTask(null); }} onSubmit={handleAssignTask} onUnassign={handleUnassignTask} />
       <RequestReworkModal open={activeModal === 'rework'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleRework} />
       <EscalateModal open={activeModal === 'escalate'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleEscalate} />
+      <RequestApprovalModal open={activeModal === 'requestApproval'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleRequestApproval} />
       <CloseComplaintModal open={activeModal === 'close'} complaint={complaint} onClose={() => setActiveModal(null)} onSubmit={handleClose} />
     </>
   );

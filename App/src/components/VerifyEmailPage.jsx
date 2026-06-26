@@ -51,7 +51,7 @@ export function VerifyEmailPage() {
           setStatus('error');
           setMessage(result.error || 'Invalid or expired verification token.');
         }
-      } catch (error) {
+      } catch {
         setStatus('error');
         setMessage('Unable to verify your email at this time. Please try again later.');
       }
