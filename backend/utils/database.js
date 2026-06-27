@@ -175,11 +175,13 @@ function buildHistoryEntry({
   byRole,
   note = null,
 } = {}) {
+  const byObjectId = by instanceof ObjectId ? by : new ObjectId(by);
+
   return {
     action,
     from,
     to,
-    by: new ObjectId(by),
+    by: byObjectId,
     byName,
     byRole,
     at: new Date(),
@@ -714,7 +716,12 @@ export const complaintOperations = {
       reworkHistory: [],
 
       // Closure report
-      closureReport: null,  // { summary, preventiveRecommendations, costActual, timeToResolve }
+      closureReport: {
+        summary: null,
+        preventiveRecommendations: [],
+        costActual: 0,
+        timeToResolve: null,
+      },
 
       // Performance metrics
       metrics: {
@@ -1319,23 +1326,44 @@ export const managementOperations = {
     // Start with existing definition or empty object
     const existingScope = complaint.scopeDefinition || {};
 
+    const parseStringArray = (value) => {
+      if (Array.isArray(value)) {
+        return value.map((item) => String(item).trim()).filter((item) => item.length > 0);
+      }
+      if (typeof value === 'string') {
+        return value
+          .split(',')
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0);
+      }
+      return [];
+    };
+
     const newScopeDefinition = {
-      description: existingScope.description || scopeData.scopeDescription || '',
-      estimatedDuration: existingScope.estimatedDuration || (
-        scopeData.estimatedDuration
+      description:
+        scopeData.scopeDescription && scopeData.scopeDescription.trim().length > 0
+          ? scopeData.scopeDescription.trim()
+          : existingScope.description || '',
+      estimatedDuration:
+        scopeData.estimatedDuration !== undefined && scopeData.estimatedDuration !== null
           ? (Number.isFinite(Number(scopeData.estimatedDuration))
             ? Math.ceil(Number(scopeData.estimatedDuration))
-            : 2)
-          : 2
-      ),
-      requiredSkills: existingScope.requiredSkills || scopeData.requiredSkills || [],
-      estimatedCost: existingScope.estimatedCost !== undefined
-        ? existingScope.estimatedCost
-        : (scopeData.estimatedCost !== undefined
+            : existingScope.estimatedDuration || 0)
+          : existingScope.estimatedDuration || 0,
+      requiredSkills:
+        parseStringArray(scopeData.requiredSkills).length > 0
+          ? parseStringArray(scopeData.requiredSkills)
+          : existingScope.requiredSkills || [],
+      estimatedCost:
+        scopeData.estimatedCost !== undefined && scopeData.estimatedCost !== null
           ? (Number.isFinite(Number(scopeData.estimatedCost))
             ? Number(scopeData.estimatedCost)
-            : 0)
-          : 0),
+            : existingScope.estimatedCost || 0)
+          : existingScope.estimatedCost || 0,
+      dependencies:
+        parseStringArray(scopeData.dependencies).length > 0
+          ? parseStringArray(scopeData.dependencies)
+          : existingScope.dependencies || [],
     };
 
     console.log('📝 [defineScopeComplaint] New scope definition:', newScopeDefinition);
@@ -1346,8 +1374,8 @@ export const managementOperations = {
       updatedAt: new Date(),
     };
 
-    // Update status if complaint is at right stage
-    if (complaint.status === 'pending' || complaint.status === 'triaged') {
+    // Update status if complaint is at the right stage
+    if (['pending', 'triaged', 'analyzed'].includes(complaint.status)) {
       updateFields.status = 'scope_defined';
     }
 
@@ -1707,21 +1735,32 @@ export const managementOperations = {
     });
     if (!complaint) return null;
 
-    // Only valid for resolved complaints
-    if (complaint.status !== 'resolved') return null;
+    const allTasksDone = Array.isArray(complaint.tasks) && complaint.tasks.length > 0 && complaint.tasks.every((t) => t.status === 'done');
+    const isScopeDefinedReady = complaint.status === 'scope_defined' && allTasksDone;
+    const isAlreadyResolved = complaint.status === 'resolved';
+    const canRequestApprovalNow = isAlreadyResolved || isScopeDefinedReady;
+    if (!canRequestApprovalNow) return null;
 
     const updateFields = {
       'residentValidation.requestedAt': new Date(),
       'residentValidation.requestedBy': new ObjectId(requestData.requestedBy),
+      'residentValidation.requestedByName': requestData.requestedByName || 'Estates Officer',
       'residentValidation.requestMessage': requestData.message || 'Please review and approve the completed work.',
       'residentValidation.isPending': true,
       updatedAt: new Date(),
     };
 
+    if (isScopeDefinedReady) {
+      updateFields.status = 'resolved';
+      updateFields.resolvedAt = new Date();
+    } else if (isAlreadyResolved && !complaint.resolvedAt) {
+      updateFields.resolvedAt = new Date();
+    }
+
     const historyEntry = buildHistoryEntry({
       action: 'approval_requested',
       from: complaint.status,
-      to: complaint.status,
+      to: updateFields.status || complaint.status,
       by: requestData.requestedBy,
       byName: 'Estates Officer',
       byRole: 'estates_officer',
@@ -1750,8 +1789,9 @@ export const managementOperations = {
     });
     if (!complaint) return null;
 
-    // Check if approval was actually requested
-    if (!complaint.residentValidation?.isPending) return null;
+    // Allow approval submission when the complaint is resolved,
+    // even if a prior approval request was not explicitly created.
+    if (complaint.status !== 'resolved') return null;
 
     let nextStatus = complaint.status;
     if (
@@ -1767,9 +1807,11 @@ export const managementOperations = {
       status: nextStatus,
       'residentValidation.completedAt': new Date(),
       'residentValidation.approvedBy': new ObjectId(approvalData.approvedBy),
+      'residentValidation.approvedByName': approvalData.approvedByName || 'Resident',
       'residentValidation.status': approvalData.approvalStatus,
       'residentValidation.feedback': approvalData.feedback || '',
       'residentValidation.satisfactionRating': approvalData.satisfactionRating || 0,
+      'residentValidation.rejectionReason': approvalData.rejectionReason || null,
       'residentValidation.isPending': false,
       updatedAt: new Date(),
     };
@@ -1902,6 +1944,15 @@ export const managementOperations = {
     });
     if (!complaint) return null;
 
+    // Diagnostic logging to help trace failures during close
+    try {
+      console.log('🔵 [closeComplaint] Starting close for', complaintId);
+      console.log('🔵 [closeComplaint] Current status:', complaint.status);
+      console.log('🔵 [closeComplaint] Incoming closureData:', JSON.stringify(closureData));
+    } catch (logErr) {
+      console.warn('Failed to stringify closureData for logging', logErr);
+    }
+
     // Calculate time to resolve
     const timeToResolveMs = new Date() - complaint.createdAt;
     const timeToResolveDays = Math.ceil(timeToResolveMs / (1000 * 60 * 60 * 24));
@@ -1910,17 +1961,33 @@ export const managementOperations = {
     const slaMetCompliance = !complaint.slaDeadline ||
       new Date() <= complaint.slaDeadline;
 
+    const closedById =
+      closureData.closedBy instanceof ObjectId
+        ? closureData.closedBy
+        : new ObjectId(closureData.closedBy);
+
+    const closureReport = {
+      summary: closureData.closureSummary || '',
+      preventiveRecommendations: Array.isArray(closureData.preventiveRecommendations)
+        ? closureData.preventiveRecommendations
+        : [],
+      costActual: Number.isFinite(Number(closureData.costActual))
+        ? Number(closureData.costActual)
+        : 0,
+      timeToResolve: timeToResolveDays,
+    };
+
+    const metrics = {
+      slaMetCompliance,
+      totalHandlingTime: timeToResolveMs / (1000 * 60 * 60),
+    };
+
     const updateFields = {
       status: 'closed',
-      closedBy: new ObjectId(closureData.closedBy),
+      closedBy: closedById,
       closedAt: new Date(),
-      'closureReport.summary': closureData.closureSummary || '',
-      'closureReport.preventiveRecommendations':
-        closureData.preventiveRecommendations || [],
-      'closureReport.costActual': closureData.costActual || 0,
-      'closureReport.timeToResolve': timeToResolveDays,
-      'metrics.slaMetCompliance': slaMetCompliance,
-      'metrics.totalHandlingTime': timeToResolveMs / (1000 * 60 * 60),
+      closureReport,
+      metrics,
       updatedAt: new Date(),
     };
 
@@ -1928,21 +1995,28 @@ export const managementOperations = {
       action: 'closed',
       from: complaint.status,
       to: 'closed',
-      by: closureData.closedBy,
+      by: closedById,
       byName: 'Estates Officer',
       byRole: 'estates_officer',
       note: `Closed: ${closureData.closureSummary || 'Complaint resolved'}. SLA Compliant: ${slaMetCompliance}`,
     });
 
-    const result = await complaints.updateOne(
-      { _id: new ObjectId(complaintId) },
-      {
-        $set: updateFields,
-        $push: { history: historyEntry },
-      }
-    );
+    // Perform the update with explicit error capture so we log any DB-level failures
+    let result;
+    try {
+      result = await complaints.updateOne(
+        { _id: new ObjectId(complaintId) },
+        {
+          $set: updateFields,
+          $push: { history: historyEntry },
+        }
+      );
+    } catch (err) {
+      console.error('🔴 [closeComplaint] MongoDB updateOne failed:', err && err.stack ? err.stack : err);
+      throw err; // rethrow so controller/global handler records it as well
+    }
 
-    if (result.modifiedCount === 0) return null;
+    if (!result || result.modifiedCount === 0) return null;
 
     return await complaints.findOne({ _id: new ObjectId(complaintId) });
   },

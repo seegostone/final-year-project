@@ -74,12 +74,20 @@ const defineScopeValidation = [
     .withMessage('Estimated duration must be a positive number'),
   body('requiredSkills')
     .optional()
-    .isArray()
-    .withMessage('Required skills must be an array'),
+    .custom((value) => {
+      return Array.isArray(value) || typeof value === 'string';
+    })
+    .withMessage('Required skills must be an array or comma-separated string'),
   body('estimatedCost')
     .optional()
     .isFloat({ min: 0 })
     .withMessage('Estimated cost must be a positive number'),
+  body('dependencies')
+    .optional()
+    .custom((value) => {
+      return Array.isArray(value) || typeof value === 'string';
+    })
+    .withMessage('Dependencies must be an array or comma-separated string'),
 ];
 
 

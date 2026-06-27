@@ -49,7 +49,7 @@ function App() {
           {/* Shared complaint dashboard */}
           <Route path="/dashboard" element={<ProtectedRoute><ComplaintDashboard /></ProtectedRoute>} />
           <Route path="/complaints" element={<ProtectedRoute><ComplaintDashboard /></ProtectedRoute>} />
-          <Route path="/complaints/:complaintId" element={<ProtectedRoute><ComplaintDetailPage /></ProtectedRoute>} />
+          <Route path="/complaints/:complaintId" element={<ProtectedRoute allowedRoles={["resident_staff"]}><ComplaintDetailPage /></ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 
           {/* Root: redirect to role-specific dashboard when authenticated */}

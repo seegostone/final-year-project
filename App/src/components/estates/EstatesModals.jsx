@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '../ui/dialog.jsx';
@@ -815,19 +815,52 @@ export function CloseComplaintModal({ open, complaint, onClose, onSubmit }) {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
+  useEffect(() => {
+    if (!open) {
+      setError(null);
+      setSuccess(false);
+      setLoading(false);
+      setClosureSummary('');
+      setCostActual('');
+    }
+  }, [open]);
+
   const handleSubmit = async () => {
-    if (!closureSummary.trim()) { setError('Closure summary is required.'); return; }
+    const trimmedSummary = closureSummary.trim();
+
+    if (!trimmedSummary) {
+      setError('Closure summary is required.');
+      return;
+    }
+
+    if (trimmedSummary.length < 10) {
+      setError('Closure summary must be at least 10 characters long.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
+
     try {
-      await onSubmit(complaint._id, {
+      const result = await onSubmit(complaint._id, {
         closureSummary: closureSummary.trim(),
         costActual: costActual ? parseFloat(costActual) : 0,
       });
-      setSuccess(true);
-      setTimeout(() => { setSuccess(false); setClosureSummary(''); setCostActual(''); onClose(); }, 1200);
-    } catch {
-      setError('Failed to close complaint. Please try again.');
+
+      if (result?.success) {
+        setSuccess(true);
+        setTimeout(() => {
+          setSuccess(false);
+          setClosureSummary('');
+          setCostActual('');
+          onClose();
+        }, 1200);
+      } else {
+        setError(result?.error || 'Failed to close complaint. Please try again.');
+      }
+    } catch (err) {
+      console.error('CloseComplaintModal submit error:', err);
+      setError(err?.message || 'Failed to close complaint. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -850,7 +883,7 @@ export function CloseComplaintModal({ open, complaint, onClose, onSubmit }) {
               {error && (
                 <Alert className="border-rose-200 bg-rose-50">
                   <AlertTriangle className="h-4 w-4 text-rose-600" />
-                  <AlertDescription className="text-rose-800 text-sm">{error}</AlertDescription>
+                  <AlertDescription className="text-rose-900 text-sm">{error}</AlertDescription>
                 </Alert>
               )}
               <div className="space-y-1.5">
@@ -862,7 +895,11 @@ export function CloseComplaintModal({ open, complaint, onClose, onSubmit }) {
                   name="closureSummary"
                   value={closureSummary}
                   onChange={(e) => setClosureSummary(e.target.value)}
+                  maxLength={500}
                 />
+                <p className="text-xs text-slate-500">
+                  Minimum 10 characters. Maximum 500 characters.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label>Actual Cost Incurred (UGX)</Label>

@@ -378,13 +378,45 @@ router.patch(
       }
 
       // Fetch updated complaint to return updated task
-      const updatedComplaint = await complaints.findOne(complaintQuery);
+      let updatedComplaint = await complaints.findOne(complaintQuery);
 
       const updatedTask = (updatedComplaint.tasks || []).find(
         (t) => t._id.toString() === taskId
       );
 
       if (status === 'done') {
+        const allTasksDone = (updatedComplaint.tasks || []).length > 0 &&
+          (updatedComplaint.tasks || []).every((t) => t.status === 'done');
+
+        if (allTasksDone && !['resolved', 'closed', 'validated', 'rework_required'].includes(updatedComplaint.status)) {
+          const resolvedHistory = {
+            action: 'auto_resolved',
+            from: updatedComplaint.status,
+            to: 'resolved',
+            by: technicianId,
+            byName: 'Technician',
+            byRole: 'technician',
+            at: new Date(),
+            note: 'All tasks completed. Complaint automatically moved to resolved.',
+          };
+
+          await complaints.updateOne(
+            { ...complaintQuery },
+            {
+              $set: {
+                status: 'resolved',
+                resolvedAt: new Date(),
+                updatedAt: new Date(),
+              },
+              $push: { history: resolvedHistory },
+            }
+          );
+
+          updatedComplaint = await complaints.findOne(complaintQuery);
+        }
+      }
+
+      if (status === 'done' || status === 'blocked') {
         try {
           const officers = await db.collection('users')
             .find({ role: { $in: ['estates_officer', 'admin'] }, isActive: true })
@@ -392,6 +424,14 @@ router.patch(
 
           await Promise.allSettled(
             officers.map(async (officer) => {
+              const notificationType = status === 'done' ? 'task_completed' : 'task_blocked';
+              const notificationTitle = status === 'done'
+                ? 'Technician completed a task'
+                : 'Technician reported an issue';
+              const notificationMessage = status === 'done'
+                ? `Technician completed task "${task.title}" for complaint ${complaint.complaintId || complaint._id.toString()}.`
+                : `Technician marked task "${task.title}" as pending and requires attention for complaint ${complaint.complaintId || complaint._id.toString()}.`;
+
               await db.collection('users').updateOne(
                 { _id: officer._id },
                 {
@@ -400,9 +440,9 @@ router.patch(
                       $each: [
                         {
                           _id: new ObjectId(),
-                          type: 'task_completed',
-                          title: 'Technician completed a task',
-                          message: `Technician completed task "${task.title}" for complaint ${complaint.complaintId || complaint._id.toString()}.`,
+                          type: notificationType,
+                          title: notificationTitle,
+                          message: notificationMessage,
                           complaintId: complaint._id.toString(),
                           taskId,
                           route: '/management/queue',
@@ -420,28 +460,32 @@ router.patch(
               if (officer.email) {
                 await emailService.sendNotificationEmail(
                   officer.email,
-                  'Technician completed a task',
-                  `A technician has completed task "${task.title}" for complaint ${complaint.complaintId || complaint._id.toString()}.`,
+                  notificationTitle,
+                  notificationMessage,
                   { route: '/management/queue' }
                 );
               }
             })
           );
         } catch (notifyError) {
-          console.warn('Task completion notification failed:', notifyError);
+          console.warn('Task status notification failed:', notifyError);
         }
       }
+
+      const finalTask = (updatedComplaint.tasks || []).find(
+        (t) => t._id.toString() === taskId
+      );
 
       res.status(200).json({
         success: true,
         message: 'Task status updated successfully',
         data: {
-          id: updatedTask._id.toString(),
-          status: updatedTask.status,
-          workReport: updatedTask.workReport,
-          pendingInfo: updatedTask.pendingInfo,
-          completedAt: updatedTask.completedAt?.toISOString(),
-          updatedAt: updatedTask.updatedAt?.toISOString(),
+          id: finalTask._id.toString(),
+          status: finalTask.status,
+          workReport: finalTask.workReport,
+          pendingInfo: finalTask.pendingInfo,
+          completedAt: finalTask.completedAt?.toISOString(),
+          updatedAt: finalTask.updatedAt?.toISOString(),
         },
       });
     } catch (error) {

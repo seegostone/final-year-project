@@ -20,6 +20,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import Header from './Header';
 import complaintService from '../services/complaintsApi';
+import managementService from '../services/managementApi';
 import authService from '../services/api';
 import { useFormValidation } from '../hooks/useFormValidation';
 
@@ -231,6 +232,14 @@ export default function ComplaintDashboard() {
   const [notification, setNotification] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [expandedComplaintId, setExpandedComplaintId] = useState(null);
+  const [respondComplaintId, setRespondComplaintId] = useState(null);
+  const [approvalStatus, setApprovalStatus] = useState('ACCEPTED');
+  const [satisfactionRating, setSatisfactionRating] = useState(5);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [responseError, setResponseError] = useState(null);
+  const [responseSuccess, setResponseSuccess] = useState(null);
+  const [responseLoading, setResponseLoading] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [complaintToDelete, setComplaintToDelete] = useState(null);
 
@@ -247,6 +256,7 @@ export default function ComplaintDashboard() {
 
   const navigate = useNavigate();
   const timePanelRef = useRef(null);
+  const responsePanelRef = useRef(null);
   const fileInputRef = useRef(null);
   const initialLoadRef = useRef(true);
   const hasInitialFetchRef = useRef(false);
@@ -426,6 +436,17 @@ export default function ComplaintDashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showTimePanel]);
 
+  const currentRespondComplaint = useMemo(
+    () => complaints.find((complaint) => complaint._id === respondComplaintId) || null,
+    [complaints, respondComplaintId]
+  );
+
+  useEffect(() => {
+    if (respondComplaintId && responsePanelRef.current) {
+      responsePanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [respondComplaintId]);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setNotification(null);
@@ -496,6 +517,54 @@ export default function ComplaintDashboard() {
   const handleDeleteComplaint = (complaintId) => {
     setComplaintToDelete(complaintId);
     setDeleteModalOpen(true);
+  };
+
+  const handleStartResponse = (complaintId) => {
+    setRespondComplaintId(complaintId);
+    setApprovalStatus('ACCEPTED');
+    setSatisfactionRating(5);
+    setFeedbackText('');
+    setRejectionReason('');
+    setResponseError(null);
+    setResponseSuccess(null);
+  };
+
+  const handleSubmitResponse = async () => {
+    setResponseError(null);
+    setResponseSuccess(null);
+
+    if (approvalStatus === 'REJECTED' && !rejectionReason.trim()) {
+      setResponseError('Please provide a reason for rejection.');
+      return;
+    }
+
+    setResponseLoading(true);
+    try {
+      const currentUser = authService.getCurrentUserFromStorage();
+      const payload = {
+        approvalStatus,
+        satisfactionRating: Number(satisfactionRating),
+        feedback: feedbackText.trim(),
+        rejectionReason: approvalStatus === 'REJECTED' ? rejectionReason.trim() : undefined,
+        approvedBy: currentUser?._id,
+        approvedByName: currentUser?.name,
+      };
+
+      const result = await managementService.recordResidentApproval(respondComplaintId, payload);
+      if (result.success) {
+        setResponseSuccess('Your response has been submitted.');
+        setRespondComplaintId(null);
+        await refreshDashboardStats(timeFilter, customStartDate, customEndDate);
+        await refreshComplaints(pagination.currentPage, statusFilter, categoryFilter, timeFilter, customStartDate, customEndDate, searchQuery);
+      } else {
+        setResponseError(result.error || 'Unable to submit your response.');
+      }
+    } catch (error) {
+      console.error('Resident response submit error:', error);
+      setResponseError('Unable to submit your response.');
+    } finally {
+      setResponseLoading(false);
+    }
   };
 
   const confirmDelete = async () => {
@@ -631,6 +700,90 @@ export default function ComplaintDashboard() {
         </motion.div>
 
           {/* Stats Cards */}
+          {respondComplaintId && (
+            <div ref={responsePanelRef} className="mb-8 rounded-none border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Approval Response</p>
+                  <h2 className="text-xl font-semibold text-slate-900">Respond to approval request</h2>
+                  {currentRespondComplaint && (
+                    <p className="mt-1 text-sm text-slate-600">
+                      For complaint: <span className="font-medium text-slate-900">{currentRespondComplaint.title}</span>
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRespondComplaintId(null)}
+                  className="rounded-none border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Decision</label>
+                  <select
+                    value={approvalStatus}
+                    onChange={(e) => setApprovalStatus(e.target.value)}
+                    className="mt-2 block w-full rounded-none border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  >
+                    <option value="ACCEPTED">Accept</option>
+                    <option value="REJECTED">Request Rework</option>
+                    <option value="PARTIAL">Partial Acceptance</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Satisfaction rating</label>
+                  <select
+                    value={satisfactionRating}
+                    onChange={(e) => setSatisfactionRating(Number(e.target.value))}
+                    className="mt-2 block w-full rounded-none border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  >
+                    {[5, 4, 3, 2, 1].map((value) => (
+                      <option key={value} value={value}>{value} / 5</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Comments</label>
+                  <textarea
+                    rows={4}
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                    className="mt-2 block w-full rounded-none border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                    placeholder="Optional comments about the completed work"
+                  />
+                </div>
+                {approvalStatus === 'REJECTED' && (
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Rejection reason</label>
+                    <textarea
+                      rows={3}
+                      value={rejectionReason}
+                      onChange={(e) => setRejectionReason(e.target.value)}
+                      className="mt-2 block w-full rounded-none border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                      placeholder="Please describe why rework is needed"
+                    />
+                  </div>
+                )}
+                {responseError && <p className="text-sm text-rose-600">{responseError}</p>}
+                {responseSuccess && <p className="text-sm text-emerald-700">{responseSuccess}</p>}
+                <button
+                  type="button"
+                  onClick={handleSubmitResponse}
+                  disabled={responseLoading}
+                  className="inline-flex w-full items-center justify-center rounded-none bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-white hover:bg-[#16304f] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {responseLoading ? 'Submitting...' : 'Submit response'}
+                </button>
+              </div>
+            </div>
+          )}
           <motion.div
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
@@ -977,7 +1130,19 @@ export default function ComplaintDashboard() {
                                 </span>
                               </td>
                               <td className="px-6 py-4 text-slate-600">{formatDate(complaint.createdAt)}</td>
-                              <td className="px-6 py-4">
+                              <td className="px-6 py-4 space-y-2">
+                                <button
+                                  type="button"
+                                  onClick={() => complaint.residentValidation?.isPending && !complaint.residentValidation?.status
+                                    ? handleStartResponse(complaint._id)
+                                    : navigate(`/complaints/${complaint._id}`)}
+                                  className="inline-flex items-center gap-2 bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200 transition-colors"
+                                  title={complaint.residentValidation?.isPending && !complaint.residentValidation?.status
+                                    ? 'Respond to approval request'
+                                    : 'View complaint details'}
+                                >
+                                  {complaint.residentValidation?.isPending && !complaint.residentValidation?.status ? 'Respond' : 'View'}
+                                </button>
                                 {complaint.status === 'pending' && (
                                   <button
                                     onClick={() => handleDeleteComplaint(complaint._id)}

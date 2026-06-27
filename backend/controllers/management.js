@@ -746,32 +746,55 @@ export const requestResidentApproval = async (req, res) => {
       });
     }
 
+    const complaintDoc = await db.collection('complaints').findOne({
+      _id: new ObjectId(complaintId),
+    });
+
+    if (!complaintDoc) {
+      return res.status(404).json({
+        success: false,
+        message: 'Complaint not found',
+      });
+    }
+
     const complaint = await managementOperations.requestResidentApproval(
       db,
       complaintId,
       {
         message,
         requestedBy: userId,
+        requestedByName: req.user.name || 'Estates Officer',
       }
     );
 
     if (!complaint) {
-      return res.status(404).json({
+      return res.status(400).json({
         success: false,
-        message: 'Complaint not found or not in resolved state',
+        message:
+          'Complaint is not ready for resident approval. It must be resolved, or scope_defined with all tasks completed.',
       });
     }
 
     // Send notification/email to resident
     try {
       const submitter = await userOperations.findById(db, complaint.userId);
-      if (submitter?.email) {
-        await emailService.sendNotificationEmail(
-          submitter.email,
-          'Your work approval is requested',
-          `Please review the completed work for complaint ${complaint.complaintId || complaint._id.toString()} and provide your feedback. ${message || ''}`,
-          { route: `/complaints/${complaint._id.toString()}` }
-        );
+      if (submitter) {
+        await userOperations.addNotification(db, submitter._id, {
+          type: 'approval_request',
+          title: 'Approval requested for your complaint',
+          message: `Approval was requested for complaint ${complaint.complaintId || complaint._id.toString()}. Please review the completed work and provide feedback.`,
+          complaintId: complaint._id.toString(),
+          route: `/complaints/${complaint._id.toString()}`,
+        });
+
+        if (submitter.email) {
+          await emailService.sendNotificationEmail(
+            submitter.email,
+            'Your work approval is requested',
+            `Please review the completed work for complaint ${complaint.complaintId || complaint._id.toString()} and provide your feedback. ${message || ''}`,
+            { route: `/complaints/${complaint._id.toString()}` }
+          );
+        }
       }
     } catch (notifyError) {
       console.warn('Request approval notification failed:', notifyError);
@@ -865,6 +888,7 @@ export const recordResidentApproval = async (req, res) => {
         feedback,
         rejectionReason,
         approvedBy: userId,
+        approvedByName: req.user.name || 'Resident',
       }
     );
 
