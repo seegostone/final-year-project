@@ -143,7 +143,6 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
   const residentValidation = complaint.residentValidation || null;
   const canSubmitResidentFeedback =
     isSubmitter &&
-    complaint.status === 'resolved' &&
     residentValidation?.isPending &&
     !residentValidation?.status;
   const canAssessPrioritize = complaint.status === 'pending' && !complaint.priority;
@@ -154,8 +153,8 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
   const canClose = !['closed', 'pending'].includes(complaint.status);
   
   // Request Approval only if: resolved status + all tasks are done
-  const allTasksDone = (complaint.tasks ?? []).length > 0 && (complaint.tasks ?? []).every(t => t.status === 'done');
-  const canRequestApproval = complaint.status === 'resolved' && allTasksDone && !residentValidation?.isPending && !residentValidation?.status;
+  const allTasksDone = (complaint.tasks ?? []).length > 0 && (complaint.tasks ?? []).every((t) => t.status === 'done');
+  const canRequestApproval = ['resolved', 'scope_defined'].includes(complaint.status) && allTasksDone && !residentValidation?.isPending && !residentValidation?.status;
 
   const badgePriority = complaint.priority ?? null;
   const rawImagePath = complaint.attachments?.[0]?.url ?? complaint.imageData ?? null;
@@ -222,6 +221,9 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
       null,
       () => {
         setFeedbackSuccess('Your feedback has been submitted.');
+        setFeedbackText('');
+        setRejectionReason('');
+        setApprovalStatus('ACCEPTED');
       }
     );
 
@@ -358,7 +360,7 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
   };
 
   const handleClose = async (_id, data) => {
-    await callApi(
+    return await callApi(
       () => managementService.closeComplaint(_id, data),
       () => ({ ...complaint, status: 'closed' })
     );
@@ -422,9 +424,9 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
 
             {/* API error alert */}
             {apiError && (
-              <Alert className="mt-3 border-rose-400/40 bg-rose-500/20">
-                <AlertTriangle className="h-3.5 w-3.5 text-rose-300" />
-                <AlertDescription className="text-rose-200 text-xs">{apiError}</AlertDescription>
+              <Alert className="mt-3 border-rose-200 bg-rose-50">
+                <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
+                <AlertDescription className="text-rose-900 text-sm">{apiError}</AlertDescription>
               </Alert>
             )}
 
@@ -598,13 +600,19 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                 {(canSubmitResidentFeedback || residentValidation?.isPending || residentValidation?.status) && (
                   <div className="border border-slate-200 bg-white p-4 shadow-none rounded-none">
                     <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Submitter feedback</h4>
-                    {residentValidation?.isPending && !residentValidation?.status && !isSubmitter && (
-                      // Officer view: awaiting resident response
+                    {residentValidation?.isPending && !residentValidation?.status && (
                       <div className="space-y-3">
-                        <div className="rounded-none border border-sky-100 bg-sky-50 p-3">
-                          <p className="text-xs uppercase tracking-wide text-sky-600 font-semibold">Status</p>
-                          <p className="mt-1 text-sm font-semibold text-sky-700">⏳ Awaiting Resident Approval</p>
-                        </div>
+                        {isSubmitter ? (
+                          <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">Approval requested</p>
+                            <p className="mt-1 text-sm text-slate-700">Your complaint has been submitted for approval. Please respond below.</p>
+                          </div>
+                        ) : (
+                          <div className="rounded-none border border-sky-100 bg-sky-50 p-3">
+                            <p className="text-xs uppercase tracking-wide text-sky-600 font-semibold">Status</p>
+                            <p className="mt-1 text-sm font-semibold text-sky-700">⏳ Awaiting Resident Approval</p>
+                          </div>
+                        )}
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
                             <p className="text-xs uppercase tracking-wide text-slate-500">Requested</p>
@@ -614,49 +622,48 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                           </div>
                           <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
                             <p className="text-xs uppercase tracking-wide text-slate-500">Requested by</p>
-                            <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation?.requestedBy?.name ?? '—'}</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation?.requestedByName ?? residentValidation?.requestedBy?.name ?? '—'}</p>
                           </div>
                         </div>
                         {residentValidation?.requestMessage && (
                           <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
                             <p className="text-xs uppercase tracking-wide text-slate-500">Message</p>
-                            <p className="mt-1 text-sm text-slate-700">{residentValidation.requestMessage}</p>
+                            <p className="mt-1 text-sm text-slate-700 whitespace-pre-line">{residentValidation.requestMessage}</p>
                           </div>
                         )}
                       </div>
                     )}
-                    {residentValidation ? (
-                      !residentValidation?.isPending && (
-                        // Show feedback results when it's been submitted
-                        <div className="space-y-3">
-                          <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
-                            <p className="text-xs uppercase tracking-wide text-slate-500">Feedback status</p>
-                            <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation.status}</p>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
-                              <p className="text-xs uppercase tracking-wide text-slate-500">Rating</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation.satisfactionRating}/5</p>
-                            </div>
-                            <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
-                              <p className="text-xs uppercase tracking-wide text-slate-500">Submitted</p>
-                              <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation.completedAt ? formatDateTime(residentValidation.completedAt) : '—'}</p>
-                            </div>
-                          </div>
-                          {residentValidation.feedback && (
-                            <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
-                              <p className="text-xs uppercase tracking-wide text-slate-500">Resident comments</p>
-                              <p className="mt-1 text-sm text-slate-700 whitespace-pre-line">{residentValidation.feedback}</p>
-                            </div>
-                          )}
-                          {residentValidation.status === 'REJECTED' && residentValidation.rejectionReason && (
-                            <div className="rounded-none border border-rose-100 bg-rose-50 p-3">
-                              <p className="text-xs uppercase tracking-wide text-rose-700">Rejection reason</p>
-                              <p className="mt-1 text-sm text-rose-800">{residentValidation.rejectionReason}</p>
-                            </div>
-                          )}
+
+                    {residentValidation?.status ? (
+                      // Show feedback results when it's been submitted
+                      <div className="space-y-3">
+                        <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                          <p className="text-xs uppercase tracking-wide text-slate-500">Feedback status</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation.status}</p>
                         </div>
-                      )
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">Rating</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation.satisfactionRating}/5</p>
+                          </div>
+                          <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">Submitted</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">{residentValidation.completedAt ? formatDateTime(residentValidation.completedAt) : '—'}</p>
+                          </div>
+                        </div>
+                        {residentValidation.feedback && (
+                          <div className="rounded-none border border-slate-100 bg-slate-50 p-3">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">Resident comments</p>
+                            <p className="mt-1 text-sm text-slate-700 whitespace-pre-line">{residentValidation.feedback}</p>
+                          </div>
+                        )}
+                        {residentValidation.status === 'REJECTED' && residentValidation.rejectionReason && (
+                          <div className="rounded-none border border-rose-100 bg-rose-50 p-3">
+                            <p className="text-xs uppercase tracking-wide text-rose-700">Rejection reason</p>
+                            <p className="mt-1 text-sm text-rose-800">{residentValidation.rejectionReason}</p>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       canSubmitResidentFeedback && (
                         // Resident view: form to submit approval
