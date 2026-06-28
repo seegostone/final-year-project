@@ -317,13 +317,18 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
   };
 
   const handleAssignTask = async (_complaintId, taskId, data) => {
+    const taskIdString = taskId?.toString?.() ?? taskId;
+
     await callApi(
       () => managementService.assignTask(_complaintId, taskId, data),
       () => ({
         ...complaint,
-        tasks: (complaint.tasks ?? []).map((t) =>
-          t._id === taskId ? { ...t, assigneeId: data.technicianId, assigneeName: data.technicianName, assignedAt: new Date().toISOString() } : t
-        ),
+        tasks: (complaint.tasks ?? []).map((t) => {
+          const currentTaskId = t._id?.toString?.() ?? t.id?.toString?.() ?? t.taskId?.toString?.() ?? t._id;
+          return currentTaskId === taskIdString
+            ? { ...t, assigneeId: data.technicianId, assigneeName: data.technicianName, assignedAt: new Date().toISOString() }
+            : t;
+        }),
       })
     );
   };
