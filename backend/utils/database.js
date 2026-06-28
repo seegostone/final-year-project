@@ -11,6 +11,50 @@ function normalizeRole(role) {
     .replace(/\s+/g, '_') || 'user';
 }
 
+export async function createDatabaseIndexes(db) {
+  const users = db.collection('users');
+  const complaints = db.collection('complaints');
+
+  await users.createIndexes([
+    {
+      key: { email: 1 },
+      name: 'idx_users_email_unique',
+      unique: true,
+    },
+    {
+      key: { role: 1, isActive: 1 },
+      name: 'idx_users_role_active',
+    },
+    {
+      key: { normalizedRole: 1, isActive: 1 },
+      name: 'idx_users_normalizedRole_active',
+    },
+  ]);
+
+  await complaints.createIndexes([
+    {
+      key: { userId: 1, createdAt: -1 },
+      name: 'idx_complaints_user_createdAt',
+    },
+    {
+      key: { status: 1, createdAt: -1 },
+      name: 'idx_complaints_status_createdAt',
+    },
+    {
+      key: { category: 1, createdAt: -1 },
+      name: 'idx_complaints_category_createdAt',
+    },
+    {
+      key: { status: 1, priority: 1, slaDeadline: 1, createdAt: -1 },
+      name: 'idx_complaints_queue',
+    },
+    {
+      key: { assignedTo: 1, status: 1 },
+      name: 'idx_complaints_assigned_status',
+    },
+  ]);
+}
+
 // Atomic sequence helper for generating unique sequential IDs
 async function getNextSequence(db, name) {
   const counters = db.collection('counters');

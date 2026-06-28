@@ -9,6 +9,7 @@ import 'express-async-errors';
 import dotenv from 'dotenv';
 import winston from 'winston';
 import path from 'path';
+import { createDatabaseIndexes } from './utils/database.js';
 
 // Load environment variables
 dotenv.config();
@@ -310,9 +311,7 @@ const connectDB = async () => {
     await client.connect();
     db = client.db();
 
-    // Create indexes
-    await db.collection('users').createIndex({ email: 1 }, { unique: true });
-    await db.collection('users').createIndex({ createdAt: -1 });
+    await createDatabaseIndexes(db);
 
     logger.info('MongoDB Connected Successfully');
   } catch (error) {
