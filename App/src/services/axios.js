@@ -38,8 +38,9 @@ axiosInstance.interceptors.response.use(
     // Remove loading indicator
     // document.body.style.cursor = 'default';
     
-    // Return only the data we need; 304 responses may not include a body,
-    // so return an empty object instead of undefined.
+    // Return the full response data structure
+    // 304 responses may not include a body, so return an empty object instead of undefined.
+    console.log('API Response:', response.data);
     return response.data ?? {};
   },
   (error) => {
@@ -56,9 +57,11 @@ axiosInstance.interceptors.response.use(
     
     if (!error.response) {
       // Network error
+      console.error('Network error:', error);
       return Promise.reject({
         type: 'NETWORK_ERROR',
         message: 'Network error. Please check your internet connection.',
+        error: error,
       });
     }
     
