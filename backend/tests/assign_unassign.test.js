@@ -115,4 +115,55 @@ describe('Assign / Unassign task flow', () => {
     expect(unassignedTask.assigneeId).toBeNull();
     expect(unassignedTask.assigneeName).toBeNull();
   });
+
+  it('assigns and unassigns tasks when the task id is a string', async () => {
+    const stringTaskId = 'task_string_123';
+    const inserted = await db.collection('complaints').insertOne({
+      title: 'String Task Complaint',
+      description: 'Testing string task ids',
+      location: 'Test',
+      category: 'Maintenance',
+      status: 'triaged',
+      tasks: [
+        {
+          _id: stringTaskId,
+          title: 'String Task',
+          description: 'Task to assign',
+          status: 'open',
+          priority: 'MEDIUM',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      history: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const stringComplaintId = inserted.insertedId.toString();
+
+    const assignRes = await request(app)
+      .post(`/api/management/${stringComplaintId}/tasks/${stringTaskId}/assign`)
+      .set('Authorization', `Bearer ${officerToken}`)
+      .send({ technicianId: technician._id.toString(), technicianName: technician.name })
+      .expect(200);
+
+    expect(assignRes.body.success).toBe(true);
+
+    const afterAssign = await db.collection('complaints').findOne({ _id: new ObjectId(stringComplaintId) });
+    const assignedTask = (afterAssign.tasks || []).find((t) => String(t._id) === stringTaskId);
+    expect(assignedTask.assigneeId).toBeDefined();
+
+    const unassignRes = await request(app)
+      .post(`/api/management/${stringComplaintId}/tasks/${stringTaskId}/unassign`)
+      .set('Authorization', `Bearer ${officerToken}`)
+      .expect(200);
+
+    expect(unassignRes.body.success).toBe(true);
+
+    const afterUnassign = await db.collection('complaints').findOne({ _id: new ObjectId(stringComplaintId) });
+    const unassignedTask = (afterUnassign.tasks || []).find((t) => String(t._id) === stringTaskId);
+    expect(unassignedTask.assigneeId).toBeNull();
+    expect(unassignedTask.assigneeName).toBeNull();
+  });
 });

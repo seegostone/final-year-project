@@ -225,7 +225,7 @@ const createTaskValidation = [
 
 const assignTaskValidation = [
   param('id').isMongoId().withMessage('Invalid complaint ID'),
-  param('taskId').isMongoId().withMessage('Invalid task ID'),
+  param('taskId').notEmpty().withMessage('Invalid task ID'),
   body('technicianId')
     .notEmpty()
     .isMongoId()

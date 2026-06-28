@@ -75,6 +75,17 @@ A professional Node.js/Express backend API with MongoDB Native Driver, authentic
 
 The server will start on `http://localhost:5000`
 
+### Running with Docker Compose (recommended)
+
+From the project root, build and start services with the included Compose file:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+This starts `mongo`, `backend`, and the frontend services. The backend container uses a small startup helper to wait for MongoDB to be reachable before launching.
+
 ## Available Scripts
 
 - `npm start` - Start the production server

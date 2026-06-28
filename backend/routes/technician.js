@@ -19,6 +19,19 @@ const technicianOnly = (req, res, next) => {
   next();
 };
 
+const getTaskIdentifier = (task) => {
+  return task._id?.toString?.() || task.taskCode || task.taskId || task.id;
+};
+
+const buildTaskFilter = (taskId) => {
+  const filters = [];
+  if (ObjectId.isValid(taskId)) {
+    filters.push({ 'tasks._id': new ObjectId(taskId) });
+  }
+  filters.push({ 'tasks.taskCode': taskId }, { 'tasks.taskId': taskId }, { 'tasks.id': taskId });
+  return { $or: filters };
+};
+
 // GET /api/technician/tasks - Get all tasks assigned to logged-in technician
 router.get(
   '/tasks',
@@ -156,7 +169,7 @@ router.get(
       const technicianId = req.user._id;
       const { complaintId, taskId } = req.params;
 
-      if (!complaintId || !ObjectId.isValid(taskId)) {
+      if (!complaintId || !taskId) {
         return res.status(400).json({
           success: false,
           message: 'Invalid complaint ID or task ID',
@@ -178,9 +191,10 @@ router.get(
       }
 
       // Find the task assigned to this technician
-      const task = (complaint.tasks || []).find(
-        (t) => t._id.toString() === taskId && String(t.assigneeId) === String(technicianId)
-      );
+      const task = (complaint.tasks || []).find((t) => {
+        const currentTaskId = t._id?.toString?.() || t.taskCode || t.taskId || t.id;
+        return currentTaskId === taskId && String(t.assigneeId) === String(technicianId);
+      });
 
       if (!task) {
         return res.status(403).json({
@@ -251,7 +265,7 @@ router.patch(
   technicianOnly,
   [
     param('complaintId').notEmpty().withMessage('Invalid complaint ID'),
-    param('taskId').isMongoId().withMessage('Invalid task ID'),
+    param('taskId').notEmpty().withMessage('Invalid task ID'),
     body('status')
       .notEmpty()
       .isIn(['open', 'in_progress', 'done', 'blocked'])
@@ -272,7 +286,7 @@ router.patch(
       const { complaintId, taskId } = req.params;
       const { status, workReport, pendingInfo, notes } = req.body;
 
-      if (!complaintId || !ObjectId.isValid(taskId)) {
+      if (!complaintId || !taskId) {
         return res.status(400).json({
           success: false,
           message: 'Invalid complaint ID or task ID',
@@ -293,9 +307,10 @@ router.patch(
         });
       }
 
-      const task = (complaint.tasks || []).find(
-        (t) => t._id.toString() === taskId
-      );
+      const task = (complaint.tasks || []).find((t) => {
+        const currentTaskId = t._id?.toString?.() || t.taskCode || t.taskId || t.id;
+        return currentTaskId === taskId;
+      });
 
       if (!task) {
         return res.status(404).json({
@@ -312,22 +327,22 @@ router.patch(
         });
       }
 
-      // Build update object
+      // Build update object (use arrayFilters placeholder `t` when updating non-_id matches)
       const updateFields = {
-        'tasks.$.status': status,
-        'tasks.$.updatedAt': new Date(),
+        'tasks.$[t].status': status,
+        'tasks.$[t].updatedAt': new Date(),
       };
 
       if (status === 'done') {
-        updateFields['tasks.$.completedAt'] = new Date();
+        updateFields['tasks.$[t].completedAt'] = new Date();
       }
 
       if (status === 'in_progress' && !task.startedAt) {
-        updateFields['tasks.$.startedAt'] = new Date();
+        updateFields['tasks.$[t].startedAt'] = new Date();
       }
 
       if (workReport) {
-        updateFields['tasks.$.workReport'] = {
+        updateFields['tasks.$[t].workReport'] = {
           actionsTaken: workReport.actionsTaken,
           materialsUsed: workReport.materialsUsed || [],
           hoursSpent: workReport.hoursSpent,
@@ -337,7 +352,7 @@ router.patch(
       }
 
       if (pendingInfo) {
-        updateFields['tasks.$.pendingInfo'] = {
+        updateFields['tasks.$[t].pendingInfo'] = {
           partsNeeded: pendingInfo.partsNeeded,
           delayReason: pendingInfo.delayReason,
           submittedAt: new Date(),
@@ -346,7 +361,7 @@ router.patch(
       }
 
       if (notes) {
-        updateFields['tasks.$.notes'] = notes;
+        updateFields['tasks.$[t].notes'] = notes;
       }
 
       // Add activity log entry
@@ -359,15 +374,20 @@ router.patch(
         notes: notes || null,
       };
 
+      const combinedQuery = { $and: [complaintQuery, buildTaskFilter(taskId)] };
+
+      // Prepare arrayFilters to match the correct task element by _id or alternative identifiers
+      const taskArrayFilter = ObjectId.isValid(taskId)
+        ? { $or: [{ 't._id': new ObjectId(taskId) }, { 't.taskCode': taskId }, { 't.taskId': taskId }, { 't.id': taskId }] }
+        : { $or: [{ 't.taskCode': taskId }, { 't.taskId': taskId }, { 't.id': taskId }] };
+
       const result = await complaints.updateOne(
-        {
-          ...complaintQuery,
-          'tasks._id': new ObjectId(taskId),
-        },
+        complaintQuery,
         {
           $set: updateFields,
-          $push: { 'tasks.$.activityLog': activityEntry },
-        }
+          $push: { 'tasks.$[t].activityLog': activityEntry },
+        },
+        { arrayFilters: [taskArrayFilter] }
       );
 
       if (result.modifiedCount === 0) {
@@ -380,9 +400,7 @@ router.patch(
       // Fetch updated complaint to return updated task
       let updatedComplaint = await complaints.findOne(complaintQuery);
 
-      const updatedTask = (updatedComplaint.tasks || []).find(
-        (t) => t._id.toString() === taskId
-      );
+      const updatedTask = (updatedComplaint.tasks || []).find((t) => getTaskIdentifier(t) === taskId);
 
       if (status === 'done') {
         const allTasksDone = (updatedComplaint.tasks || []).length > 0 &&
@@ -472,9 +490,7 @@ router.patch(
         }
       }
 
-      const finalTask = (updatedComplaint.tasks || []).find(
-        (t) => t._id.toString() === taskId
-      );
+      const finalTask = (updatedComplaint.tasks || []).find((t) => getTaskIdentifier(t) === taskId);
 
       res.status(200).json({
         success: true,

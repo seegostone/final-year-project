@@ -1423,8 +1423,12 @@ export const managementOperations = {
     const complaint = await complaints.findOne({ _id: new ObjectId(complaintId) });
     if (!complaint) return null;
 
+    const taskFilter = ObjectId.isValid(taskId)
+      ? { 'tasks._id': new ObjectId(taskId) }
+      : { 'tasks._id': taskId };
+
     const result = await complaints.updateOne(
-      { _id: new ObjectId(complaintId), 'tasks._id': new ObjectId(taskId) },
+      { _id: new ObjectId(complaintId), ...taskFilter },
       {
         $set: {
           'tasks.$.assigneeId': new ObjectId(assigneeData.technicianId),
@@ -1455,11 +1459,15 @@ export const managementOperations = {
   async unassignTaskFromComplaint(db, complaintId, taskId, unassignedBy) {
     const complaints = db.collection('complaints');
 
+    const taskFilter = ObjectId.isValid(taskId)
+      ? { 'tasks._id': new ObjectId(taskId) }
+      : { 'tasks._id': taskId };
+
     // Try to update atomically, only if task exists, is not done, and has an assignee
     const result = await complaints.updateOne(
       {
         _id: new ObjectId(complaintId),
-        'tasks._id': new ObjectId(taskId),
+        ...taskFilter,
         'tasks.status': { $ne: 'done' },
         'tasks.assigneeId': { $ne: null }
       },

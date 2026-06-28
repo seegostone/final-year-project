@@ -94,8 +94,15 @@ const sendEmail = async ({ to, subject, html, text }) => {
     text,
   };
 
+  const timeoutMs = Number(process.env.EMAIL_TIMEOUT_MS || process.env.SMTP_TIMEOUT_MS || 4000);
+
   try {
-    const info = await transporter.sendMail(message);
+    const info = await Promise.race([
+      transporter.sendMail(message),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`Email send timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
     console.info('Email sent:', info.messageId);
     return info;
   } catch (err) {

@@ -367,13 +367,16 @@ export const assignTask = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to assign tasks' });
     }
 
-    if (!ObjectId.isValid(complaintId) || !ObjectId.isValid(taskId)) {
-      return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
+    if (!ObjectId.isValid(complaintId)) {
+      return res.status(400).json({ success: false, message: 'Invalid complaint ID' });
     }
 
     // Prevent assigning if task already has an assignee
     const complaintDoc = await db.collection('complaints').findOne({ _id: new ObjectId(complaintId) });
-    const targetTask = (complaintDoc?.tasks || []).find((t) => t._id.toString() === new ObjectId(taskId).toString());
+    const targetTask = (complaintDoc?.tasks || []).find((t) => {
+      const taskIdValue = t._id?.toString?.() ?? String(t._id);
+      return taskIdValue === String(taskId);
+    });
     if (!targetTask) {
       return res.status(404).json({ success: false, message: 'Task not found' });
     }
@@ -452,8 +455,8 @@ export const unassignTask = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to unassign tasks' });
     }
 
-    if (!ObjectId.isValid(complaintId) || !ObjectId.isValid(taskId)) {
-      return res.status(400).json({ success: false, message: 'Invalid complaint or task ID' });
+    if (!ObjectId.isValid(complaintId)) {
+      return res.status(400).json({ success: false, message: 'Invalid complaint ID' });
     }
 
     const updated = await managementOperations.unassignTaskFromComplaint(db, complaintId, taskId, userId);
