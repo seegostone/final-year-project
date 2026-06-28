@@ -14,6 +14,7 @@ function normalizeRole(role) {
 export async function createDatabaseIndexes(db) {
   const users = db.collection('users');
   const complaints = db.collection('complaints');
+  await users.dropIndex('email_1');
 
   await users.createIndexes([
     {
