@@ -21,6 +21,17 @@ export const handleApiError = (error) => {
       type: 'TIMEOUT_ERROR',
     };
   }
+
+  // Preserve errors already shaped by axios interceptors
+  if (error.type) {
+    return {
+      message: error.message || 'An unexpected error occurred.',
+      type: error.type,
+      status: error.status,
+      validationErrors: error.validationErrors || error.errors,
+      code: error.code,
+    };
+  }
   
   // Response error with status
   if (error.response) {

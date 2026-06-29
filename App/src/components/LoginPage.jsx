@@ -1,6 +1,6 @@
 // frontend/src/pages/LoginPage.jsx
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, LogIn } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
@@ -10,8 +10,11 @@ import { getRoleRedirectPath } from '../hooks/useRoleRedirect';
 export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const sessionExpired = searchParams.get('session') === 'expired';
   const loggedOut = searchParams.get('logout') === 'true';
+  const redirectFrom = location.state?.from?.pathname || searchParams.get('redirect');
+  const registerLink = redirectFrom ? `/register?redirect=${encodeURIComponent(redirectFrom)}` : '/register';
   
   const [formData, setFormData] = useState({
     email: '',
@@ -28,10 +31,10 @@ export default function LoginPage() {
   useEffect(() => {
     if (authService.isAuthenticated()) {
       const role = authService.getUserRole();
-      const redirectPath = getRoleRedirectPath(role);
-      navigate(redirectPath);
+      const redirectPath = redirectFrom || getRoleRedirectPath(role);
+      navigate(redirectPath, { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, redirectFrom]);
 
   // Show toast messages
   useEffect(() => {
@@ -73,15 +76,16 @@ export default function LoginPage() {
         setFailedAttempts(0);
         toast.success('Login successful!');
         const role = authService.getUserRole();
-        const redirectPath = getRoleRedirectPath(role);
-        navigate(redirectPath);
+        const redirectPath = redirectFrom || getRoleRedirectPath(role);
+        navigate(redirectPath, { replace: true });
       } else {
         const newFailedAttempts = failedAttempts + 1;
         setFailedAttempts(newFailedAttempts);
 
         if (result.type === 'UNAUTHORIZED') {
-          setError('Invalid email or password. Please try again.');
-          toast.error('Invalid credentials');
+          const message = result.error || 'Invalid email or password. Please try again.';
+          setError(message);
+          toast.error(message === 'Invalid credentials' ? 'Invalid credentials' : message);
         } else if (result.type === 'NETWORK_ERROR') {
           setError('Cannot connect to server. Please check your internet connection.');
           toast.error('Network error');
@@ -130,7 +134,7 @@ export default function LoginPage() {
             className="flex items-center gap-2 md:gap-3"
           >
             <span className="text-xs md:text-sm text-[#1e2937]">New user?</span>
-            <Link to="/register" className="text-xs md:text-sm text-[#7B1A1A] no-underline hover:text-[#5A1313] transition-colors font-medium">
+            <Link to={registerLink} className="text-xs md:text-sm text-[#7B1A1A] no-underline hover:text-[#5A1313] transition-colors font-medium">
               Create Account
             </Link>
           </motion.div>

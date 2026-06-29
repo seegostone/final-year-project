@@ -96,23 +96,52 @@ axiosInstance.interceptors.response.use(
           code: data.code,
         });
       
-      case 401:
-        // Unauthorized - clear auth storage and redirect to login
-        localStorage.removeItem('token');
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('tokenExpiry');
-        localStorage.removeItem('user');
+      case 401: {
+        const requestUrl = String(config.url || '').toLowerCase();
+        let requestPath;
 
-        // Only redirect if not already on login page
-        if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login';
+        try {
+          requestPath = requestUrl.startsWith('http')
+            ? new URL(requestUrl).pathname
+            : new URL(requestUrl, 'http://localhost').pathname;
+        } catch {
+          requestPath = requestUrl;
         }
 
-        return Promise.reject({
+        const publicAuthRoutes = [
+          '/auth/login',
+          '/auth/register',
+          '/auth/verify-email',
+          '/auth/resend-verification',
+          '/auth/forgot-password',
+          '/auth/reset-password',
+        ];
+
+        const isPublicAuthRoute = publicAuthRoutes.some((route) => requestPath.includes(route));
+        const messageFromServer = data?.message || 'Unauthorized. Please login again.';
+
+        const rejectPayload = {
           type: 'UNAUTHORIZED',
           status: 401,
-          message: 'Session expired. Please login again.',
-        });
+          message: messageFromServer,
+          response: error.response,
+        };
+
+        if (!isPublicAuthRoute) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('tokenExpiry');
+          localStorage.removeItem('user');
+
+          if (!window.location.pathname.includes('/login')) {
+            window.location.href = '/login';
+          }
+
+          rejectPayload.message = data?.message || 'Session expired. Please login again.';
+        }
+
+        return Promise.reject(rejectPayload);
+      }
       
       case 403:
         return Promise.reject({

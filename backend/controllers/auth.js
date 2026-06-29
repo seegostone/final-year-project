@@ -94,7 +94,10 @@ export const register = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'User registered successfully. Please verify your email.',
+      message: verificationEmailResult
+        ? 'User registered successfully. Please verify your email.'
+        : 'User registered successfully, but the verification email could not be sent. Please try resending verification or contact support.',
+      emailSent: Boolean(verificationEmailResult),
       data: {
         user: {
           id: user._id,
@@ -336,6 +339,11 @@ export const forgotPassword = async (req, res) => {
       console.warn(
         'Password reset email was not sent. Check EMAIL configuration and SMTP settings.'
       );
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to send password reset email. Please try again later.',
+        code: 'EMAIL_SEND_FAILED',
+      });
     }
 
     res.status(200).json({
@@ -478,6 +486,11 @@ export const resendVerificationEmail = async (req, res) => {
       console.warn(
         'Verification resend email was not sent. Check EMAIL configuration and SMTP settings.'
       );
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to resend verification email. Please try again later.',
+        code: 'EMAIL_SEND_FAILED',
+      });
     }
 
     // Get the updated user to get the expiry time

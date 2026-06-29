@@ -103,10 +103,18 @@ const sendEmail = async ({ to, subject, html, text }) => {
         setTimeout(() => reject(new Error(`Email send timed out after ${timeoutMs}ms`)), timeoutMs);
       }),
     ]);
-    console.info('Email sent:', info.messageId);
+    console.info('Email sent:', {
+      to: recipients.join(', '),
+      subject,
+      messageId: info.messageId,
+    });
     return info;
   } catch (err) {
-    console.warn('Email send failed:', err.message);
+    console.warn('Email send failed:', {
+      error: err.message,
+      to: recipients.join(', '),
+      subject,
+    });
     return null;
   }
 };

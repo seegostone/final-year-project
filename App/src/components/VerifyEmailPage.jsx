@@ -43,11 +43,8 @@ export function VerifyEmailPage() {
           setMessage('Email verified successfully! Redirecting...');
 
           setTimeout(() => {
-            const redirectPath = authService.isAuthenticated()
-              ? authService.getUserRole()
-                ? getRoleRedirectPath(authService.getUserRole())
-                : '/dashboard'
-              : '/login';
+            const role = user?.role || authService.getUserRole();
+            const redirectPath = getRoleRedirectPath(role);
             navigate(redirectPath, { replace: true });
           }, 2000);
         } else {
@@ -97,11 +94,8 @@ export function VerifyEmailPage() {
         setMessage('Email verified successfully! Redirecting...');
 
         setTimeout(() => {
-          const redirectPath = authService.isAuthenticated()
-            ? authService.getUserRole()
-              ? getRoleRedirectPath(authService.getUserRole())
-              : '/dashboard'
-            : '/login';
+          const role = user?.role || authService.getUserRole();
+          const redirectPath = getRoleRedirectPath(role);
           navigate(redirectPath, { replace: true });
         }, 2000);
       } else {

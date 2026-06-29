@@ -3,6 +3,12 @@ export default {
   transform: {
     '^.+\\.js$': 'babel-jest',
   },
+  globals: {
+    'babel-jest': {
+      useESM: true,
+    },
+  },
+  testTimeout: 30000,
   testMatch: ['**/tests/**/*.test.js'],
   collectCoverageFrom: [
     '**/*.js',

@@ -1,6 +1,6 @@
 // frontend/src/pages/RegisterPage.jsx
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/api';
 import { useFormValidation } from '../hooks/useFormValidation';
 import { validateRegistrationForm, calculatePasswordStrength } from '../utils/validation';
@@ -12,6 +12,9 @@ import { getRoleRedirectPath } from '../hooks/useRoleRedirect'; // ✅ Import th
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirectFrom = new URLSearchParams(location.search).get('redirect');
+  const loginLink = redirectFrom ? `/login?redirect=${encodeURIComponent(redirectFrom)}` : '/login';
   const [passwordStrength, setPasswordStrength] = useState('Weak');
   const [apiError, setApiError] = useState('');
   const [showVerificationModal, setShowVerificationModal] = useState(false);
@@ -134,7 +137,7 @@ export default function RegisterPage() {
             className="flex items-center gap-2 md:gap-3"
           >
             <span className="text-xs md:text-sm text-[#1e2937]">Already have an account?</span>
-            <Link to="/login" className="text-xs md:text-sm text-[#7B1A1A] no-underline hover:text-[#5A1313] transition-colors font-medium">
+            <Link to={loginLink} className="text-xs md:text-sm text-[#7B1A1A] no-underline hover:text-[#5A1313] transition-colors font-medium">
               Sign In
             </Link>
           </motion.div>

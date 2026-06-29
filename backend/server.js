@@ -9,14 +9,12 @@ import 'express-async-errors';
 import dotenv from 'dotenv';
 import winston from 'winston';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { createDatabaseIndexes } from './utils/database.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const backendDir = process.cwd();
 
-// Load environment variables from backend/.env regardless of cwd
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+// Load environment variables from backend/.env when running inside the backend folder
+dotenv.config({ path: path.resolve(backendDir, '.env') });
 
 // Create Express app
 const app = express();
