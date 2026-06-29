@@ -9,6 +9,7 @@ import authService from '../services/api';
 export default function ResetPasswordPage() {
   const { token } = useParams();
   const navigate = useNavigate();
+  const [resetToken, setResetToken] = useState(token || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,6 +19,10 @@ export default function ResetPasswordPage() {
   const [isSuccess, setIsSuccess] = useState(false);
 
   const validatePasswords = () => {
+    if (!resetToken?.trim()) {
+      setError('Reset token is required.');
+      return false;
+    }
     if (!password || !confirmPassword) {
       setError('Please enter both passwords.');
       return false;
@@ -42,7 +47,8 @@ export default function ResetPasswordPage() {
     setIsLoading(true);
 
     try {
-      const result = await authService.resetPassword(token, password);
+      const activeToken = token || resetToken.trim();
+      const result = await authService.resetPassword(activeToken, password);
       if (result.success) {
         setIsSuccess(true);
         toast.success('Password reset successful!');
@@ -138,6 +144,26 @@ export default function ResetPasswordPage() {
               Create a new password for your account
             </p>
           </motion.div>
+
+          {!token && (
+            <div className="mb-6">
+              <label htmlFor="resetToken" className="block text-sm font-medium text-[#1e2937] mb-2">
+                Reset Token
+              </label>
+              <motion.input
+                whileFocus={{ scale: 1.01 }}
+                id="resetToken"
+                name="resetToken"
+                type="text"
+                placeholder="Enter the reset token from your email"
+                value={resetToken}
+                onChange={(e) => setResetToken(e.target.value)}
+                className="w-full px-4 py-3 border border-[#e2e8f0] bg-white text-[#1e2937] focus:outline-none focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7] transition-all"
+                disabled={isLoading}
+                autoComplete="one-time-code"
+              />
+            </div>
+          )}
 
           {error && (
             <motion.div

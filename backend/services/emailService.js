@@ -111,12 +111,12 @@ const sendEmail = async ({ to, subject, html, text }) => {
   }
 };
 
-const buildBaseTemplate = ({ title, body, actionLabel, actionUrl }) => {
+const buildBaseTemplate = ({ title, body, bodyHtml, actionLabel, actionUrl }) => {
   const template = `
     <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
       <div style="max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background: #ffffff;">
         <h1 style="font-size: 22px; margin-bottom: 16px; color: #111827;">{{title}}</h1>
-        <div style="font-size: 16px; margin-bottom: 24px; color: #374151;">{{body}}</div>
+        <div style="font-size: 16px; margin-bottom: 24px; color: #374151;">{{{bodyHtml}}}{{^bodyHtml}}{{body}}{{/bodyHtml}}</div>
         {{#if actionUrl}}
           <a href="{{actionUrl}}" style="display: inline-block; padding: 12px 18px; background: #16a34a; color: #ffffff; text-decoration: none; border-radius: 8px;">{{actionLabel}}</a>
         {{/if}}
@@ -125,18 +125,17 @@ const buildBaseTemplate = ({ title, body, actionLabel, actionUrl }) => {
     </div>
   `;
 
-  return renderTemplate(template, { title, body, actionLabel, actionUrl });
+  return renderTemplate(template, { title, body, bodyHtml, actionLabel, actionUrl });
 };
 
 const sendVerificationEmail = async (email, token) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email/${encodeURIComponent(token)}`;
   const subject = 'Verify your EstatesComplaint email';
-  const body = 'Please verify your email by clicking the button below.\n\nIf you did not create an account, you can ignore this email.';
+  const body = `Please verify your email by using the code below or clicking the button.\n\nVerification code: ${token}\n\nIf you did not create an account, you can ignore this email.`;
   const html = buildBaseTemplate({
     title: 'Verify your email',
-    body:
-      'Thank you for registering. Click the button below to verify your email address and continue to EstatesComplaint.',
+    bodyHtml: `Thank you for registering. Use the code below to verify your email address and continue to EstatesComplaint.<br/><br/><strong>Verification code:</strong><br/>${token}`,
     actionLabel: 'Verify Email',
     actionUrl: verificationUrl,
   });
@@ -146,6 +145,27 @@ const sendVerificationEmail = async (email, token) => {
     subject,
     html,
     text: `${body}\n\n${verificationUrl}`,
+  });
+};
+
+const sendResetPasswordEmail = async (email, token) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const resetUrl = `${frontendUrl}/reset-password/${encodeURIComponent(token)}`;
+  const subject = 'Reset your EstatesComplaint password';
+  const body = `Use the link below or the token to reset your password. This token will expire in 10 minutes.\n\nReset token: ${token}`;
+  const html = buildBaseTemplate({
+    title: 'Reset your password',
+    bodyHtml:
+      `A password reset was requested for your EstatesComplaint account. Use the token below or click the button to set a new password. If you did not request this, ignore this email.<br/><br/><strong>Reset token:</strong><br/>${token}`,
+    actionLabel: 'Reset Password',
+    actionUrl: resetUrl,
+  });
+
+  return sendEmail({
+    to: email,
+    subject,
+    html,
+    text: `${body}\n\n${resetUrl}`,
   });
 };
 
@@ -169,5 +189,6 @@ const sendNotificationEmail = async (email, subject, message, options = {}) => {
 
 export default {
   sendVerificationEmail,
+  sendResetPasswordEmail,
   sendNotificationEmail,
 };

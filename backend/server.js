@@ -9,10 +9,14 @@ import 'express-async-errors';
 import dotenv from 'dotenv';
 import winston from 'winston';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { createDatabaseIndexes } from './utils/database.js';
 
-// Load environment variables
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from backend/.env regardless of cwd
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 // Create Express app
 const app = express();
@@ -73,7 +77,6 @@ app.use('/api', (req, res, next) => {
 });
 
 // Static file serving for uploads
-const __dirname = process.cwd();
 // Ensure uploaded files always carry a permissive CORP header so the SPA (different origin/port)
 // can load images without being blocked by the browser's resource policy.
 app.use('/uploads', (req, res, next) => {

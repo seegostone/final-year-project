@@ -82,10 +82,14 @@ export const register = async (req, res) => {
     console.log('Generated email verification token:', verificationToken); // Debug log
 
     // Send verification email if configured
-    try {
-      await emailService.sendVerificationEmail(email, verificationToken);
-    } catch (sendError) {
-      console.warn('Verification email could not be sent:', sendError.message);
+    const verificationEmailResult = await emailService.sendVerificationEmail(
+      email,
+      verificationToken
+    );
+    if (!verificationEmailResult) {
+      console.warn(
+        'Verification email was not sent. Check EMAIL configuration and SMTP settings.'
+      );
     }
 
     res.status(201).json({
@@ -324,12 +328,19 @@ export const forgotPassword = async (req, res) => {
     // Get reset token
     const resetToken = await userOperations.setResetPasswordToken(db, email);
 
-    // In a real application, you would send an email here
-    // For now, we'll just return the token for testing purposes
+    const resetEmailResult = await emailService.sendResetPasswordEmail(
+      email,
+      resetToken
+    );
+    if (!resetEmailResult) {
+      console.warn(
+        'Password reset email was not sent. Check EMAIL configuration and SMTP settings.'
+      );
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Password reset token generated',
-      resetToken, // Remove this in production
+      message: 'Password reset email sent',
     });
   } catch (error) {
     res.status(500).json({
@@ -458,10 +469,16 @@ export const resendVerificationEmail = async (req, res) => {
       db,
       email
     );
-    // In a real application, send email with verificationToken
-    // For now, just return the token in response (for testing)
 
-    console.log('Generated email verification token:', verificationToken); // Debug log
+    const verificationEmailResult = await emailService.sendVerificationEmail(
+      email,
+      verificationToken
+    );
+    if (!verificationEmailResult) {
+      console.warn(
+        'Verification resend email was not sent. Check EMAIL configuration and SMTP settings.'
+      );
+    }
 
     // Get the updated user to get the expiry time
     const updatedUser = await userOperations.findByEmail(db, email);
@@ -469,7 +486,7 @@ export const resendVerificationEmail = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Verification email sent',
-      expiresAt: updatedUser.emailVerificationExpire, // ← Add this line
+      expiresAt: updatedUser.emailVerificationExpire,
       verificationToken, // Remove this in production
     });
   } catch (error) {

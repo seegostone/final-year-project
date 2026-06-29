@@ -7,16 +7,19 @@ import authService from '../services/api';
 export function VerifyEmailPage() {
   const navigate = useNavigate();
   const { verificationToken } = useParams();
-  const [status, setStatus] = useState('pending');
-  const [message, setMessage] = useState('Verifying your email...');
+  const [status, setStatus] = useState(verificationToken ? 'pending' : 'idle');
+  const [message, setMessage] = useState(
+    verificationToken
+      ? 'Verifying your email...'
+      : 'Enter the verification code sent to your email.'
+  );
+  const [tokenValue, setTokenValue] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [inputError, setInputError] = useState('');
 
   useEffect(() => {
     const verify = async () => {
-      if (!verificationToken) {
-        setStatus('error');
-        setMessage('Verification token is missing.');
-        return;
-      }
+      if (!verificationToken) return;
 
       try {
         const result = await authService.verifyEmail(verificationToken);
@@ -60,6 +63,57 @@ export function VerifyEmailPage() {
     verify();
   }, [verificationToken, navigate]);
 
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setInputError('');
+    setIsSubmitting(true);
+
+    const code = tokenValue.trim();
+    if (!code) {
+      setInputError('Verification code cannot be empty.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const result = await authService.verifyEmail(code);
+
+      if (result.success) {
+        const token = result.data.token;
+        const user = result.data.user;
+
+        if (token) {
+          localStorage.setItem('token', token);
+          localStorage.setItem('user', JSON.stringify(user));
+          try {
+            const expiry = authService.getTokenExpiry(token);
+            if (expiry) localStorage.setItem('tokenExpiry', expiry);
+          } catch {
+            // ignore expiry calculation errors
+          }
+        }
+
+        setStatus('success');
+        setMessage('Email verified successfully! Redirecting...');
+
+        setTimeout(() => {
+          const redirectPath = authService.isAuthenticated()
+            ? authService.getUserRole()
+              ? getRoleRedirectPath(authService.getUserRole())
+              : '/dashboard'
+            : '/login';
+          navigate(redirectPath, { replace: true });
+        }, 2000);
+      } else {
+        setInputError(result.error || 'Invalid or expired verification token.');
+      }
+    } catch {
+      setInputError('Unable to verify your email at this time. Please try again later.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center px-4" style={{ fontFamily: 'Inter, sans-serif' }}>
       <div className="max-w-lg w-full bg-white border border-[#e2e8f0] p-8 rounded-lg shadow-lg text-center">
@@ -69,7 +123,36 @@ export function VerifyEmailPage() {
         <p className={`text-sm ${status === 'success' ? 'text-green-600' : 'text-[#475569]'}`}>
           {message}
         </p>
-        {status === 'error' && (
+        {!verificationToken && status !== 'success' && (
+          <form onSubmit={handleSubmit} className="mt-6">
+            <div className="mb-4 text-left">
+              <label htmlFor="verificationTokenInput" className="block text-sm font-medium text-slate-700 mb-2">
+                Verification code
+              </label>
+              <input
+                id="verificationTokenInput"
+                type="text"
+                value={tokenValue}
+                onChange={(e) => setTokenValue(e.target.value)}
+                placeholder="Enter verification code"
+                className="w-full px-4 py-3 border border-[#e2e8f0] bg-white text-[#1F2937] focus:outline-none focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#eef2f7] transition-all"
+                disabled={isSubmitting}
+                autoComplete="one-time-code"
+              />
+              {(inputError || status === 'error') && (
+                <p className="text-xs text-red-700 mt-2">{inputError || message}</p>
+              )}
+            </div>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-[#7B1A1A] text-white py-3 rounded-lg hover:bg-[#5A1313] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? 'Verifying...' : 'Verify Email'}
+            </button>
+          </form>
+        )}
+        {verificationToken && status === 'error' && (
           <button
             type="button"
             onClick={() => navigate('/login')}
