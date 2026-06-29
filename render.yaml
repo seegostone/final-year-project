@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: estatescomplaint-backend
+    name: api
     env: docker
     plan: free
     dockerfilePath: ./backend/Dockerfile
@@ -18,7 +18,7 @@ services:
       - key: JWT_EXPIRE
         value: 7d
       - key: FRONTEND_URL
-        value: https://estatescomplaint-frontend.onrender.com
+        value: https://app.onrender.com
       - key: EMAIL_SERVICE
         value: gmail
       - key: EMAIL_USER
@@ -27,7 +27,7 @@ services:
         sync: false
 
   - type: web
-    name: estatescomplaint-frontend
+    name: app
     env: docker
     plan: free
     dockerfilePath: ./App/Dockerfile
@@ -35,5 +35,3 @@ services:
     envVars:
       - key: VITE_API_URL
         value: /api
-      - key: API_BACKEND_URL
-        value: https://final-year-project-y0oy.onrender.com
