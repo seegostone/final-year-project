@@ -11,11 +11,60 @@ function normalizeRole(role) {
     .replace(/\s+/g, '_') || 'user';
 }
 
+function indexKeyToString(key) {
+  return JSON.stringify(Object.entries(key).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+function isIndexEquivalent(existingIndex, options) {
+  return (
+    existingIndex.unique === options.unique &&
+    (existingIndex.sparse ?? false) === (options.sparse ?? false) &&
+    existingIndex.expireAfterSeconds === options.expireAfterSeconds
+  );
+}
+
+async function ensureIndexes(collection, indexes) {
+  let existingIndexes = [];
+
+  try {
+    existingIndexes = await collection.indexes();
+  } catch (error) {
+    if (error.codeName === 'NamespaceNotFound' || error.code === 26) {
+      existingIndexes = [];
+    } else {
+      throw error;
+    }
+  }
+
+  const existingByKey = new Map(
+    existingIndexes.map((idx) => [indexKeyToString(idx.key), idx])
+  );
+
+  for (const index of indexes) {
+    const keyString = indexKeyToString(index.key);
+    const existingIndex = existingByKey.get(keyString);
+    const options = { ...index };
+    delete options.key;
+
+    if (existingIndex) {
+      if (existingIndex.name === options.name && isIndexEquivalent(existingIndex, options)) {
+        continue;
+      }
+
+      if (existingIndex.name !== '_id_') {
+        await collection.dropIndex(existingIndex.name);
+      }
+    }
+
+    await collection.createIndex(index.key, options);
+  }
+}
+
 export async function createDatabaseIndexes(db) {
   const users = db.collection('users');
   const complaints = db.collection('complaints');
-  
-  await users.createIndexes([
+
+  await ensureIndexes(users, [
     {
       key: { email: 1 },
       name: 'idx_users_email_unique',
@@ -31,7 +80,7 @@ export async function createDatabaseIndexes(db) {
     },
   ]);
 
-  await complaints.createIndexes([
+  await ensureIndexes(complaints, [
     {
       key: { userId: 1, createdAt: -1 },
       name: 'idx_complaints_user_createdAt',

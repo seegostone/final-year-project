@@ -34,4 +34,6 @@ services:
     dockerContext: ./App
     envVars:
       - key: VITE_API_URL
-        value: https://final-year-project-y0oy.onrender.com/api
+        value: /api
+      - key: API_BACKEND_URL
+        value: https://final-year-project-y0oy.onrender.com
