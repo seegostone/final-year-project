@@ -30,14 +30,7 @@ app.use(helmet({
 }));
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests from localhost on any port, or from env URL
-      if (!origin || origin.startsWith('http://localhost:') || origin === process.env.FRONTEND_URL) {
-        callback(null, true);
-      } else {
-        callback(new Error('CORS not allowed'));
-      }
-    },
+    origin: true,
     credentials: true,
   })
 );
@@ -376,3 +369,4 @@ process.on('uncaughtException', (error) => {
 
 export { db };
 export default app;
+
