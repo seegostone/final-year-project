@@ -11,10 +11,8 @@ import winston from 'winston';
 import path from 'path';
 import { createDatabaseIndexes } from './utils/database.js';
 
-const backendDir = process.cwd();
-
-// Load environment variables from backend/.env when running inside the backend folder
-dotenv.config({ path: path.resolve(backendDir, '.env') });
+// Load environment variables
+dotenv.config();
 
 // Create Express app
 const app = express();
@@ -80,7 +78,7 @@ app.use('/api', (req, res, next) => {
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
-}, express.static(path.join(__dirname, 'uploads')));
+}, express.static(path.join(process.cwd(), 'uploads')));
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
