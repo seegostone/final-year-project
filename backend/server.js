@@ -342,14 +342,6 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-process.on('SIGTERM', async () => {
-  logger.info('Received SIGTERM, shutting down gracefully...');
-  if (client) {
-    await client.close();
-  }
-  process.exit(0);
-});
-
 if (process.env.NODE_ENV !== 'test') {
   startServer().catch((err) => {
     logger.error('Failed to start server:', err);
