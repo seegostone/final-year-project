@@ -33,6 +33,7 @@ describe('Authentication', () => {
         name: 'Test User',
         email: 'test@gmail.com',
         password: 'Password123!',
+        phoneNumber: '0712345678',
       };
 
       const response = await request(app)

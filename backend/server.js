@@ -9,10 +9,29 @@ import 'express-async-errors';
 import dotenv from 'dotenv';
 import winston from 'winston';
 import path from 'path';
+import fs from 'fs';
 import { createDatabaseIndexes } from './utils/database.js';
 
-// Load environment variables
-dotenv.config();
+const findBackendRoot = () => {
+  const candidates = [
+    process.cwd(),
+    path.resolve(process.cwd(), 'backend'),
+    path.resolve(process.cwd(), '..', 'backend'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, '.env')) && fs.existsSync(path.join(candidate, 'package.json'))) {
+      return candidate;
+    }
+  }
+
+  return process.cwd();
+};
+
+const appRoot = findBackendRoot();
+
+// Load environment variables from the backend directory regardless of launch cwd
+dotenv.config({ path: path.resolve(appRoot, '.env') });
 
 // Create Express app
 const app = express();
@@ -78,7 +97,7 @@ app.use('/api', (req, res, next) => {
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
-}, express.static(path.join(process.cwd(), 'uploads')));
+}, express.static(path.join(appRoot, 'uploads')));
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
@@ -92,8 +111,8 @@ const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'backend-service' },
   transports: [
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' }),
+    new winston.transports.File({ filename: path.join(appRoot, 'logs', 'error.log'), level: 'error' }),
+    new winston.transports.File({ filename: path.join(appRoot, 'logs', 'combined.log') }),
   ],
 });
 
@@ -364,7 +383,6 @@ process.on('uncaughtException', (error) => {
   // Uncaught exceptions usually mean the process is in an unstable state
   process.exit(1);
 });
-
 
 export { db };
 export default app;

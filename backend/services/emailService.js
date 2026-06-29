@@ -1,5 +1,27 @@
 ﻿import nodemailer from 'nodemailer';
 import handlebars from 'handlebars';
+import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+
+const findBackendRoot = () => {
+  const candidates = [
+    process.cwd(),
+    path.resolve(process.cwd(), 'backend'),
+    path.resolve(process.cwd(), '..', 'backend'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, '.env')) && fs.existsSync(path.join(candidate, 'package.json'))) {
+      return candidate;
+    }
+  }
+
+  return process.cwd();
+};
+
+const appRoot = findBackendRoot();
+dotenv.config({ path: path.resolve(appRoot, '.env') });
 
 const getTransport = () => {
   const user = process.env.EMAIL_USER;
@@ -16,17 +38,25 @@ const getTransport = () => {
     return null;
   }
 
+  const auth = { user, pass };
+
   if (service) {
     return nodemailer.createTransport({
       service,
-      auth: {
-        user,
-        pass,
-      },
+      auth,
     });
   }
 
   if (!host || !port) {
+    if (user.toLowerCase().endsWith('@gmail.com')) {
+      return nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth,
+      });
+    }
+
     console.warn(
       'Email service is not configured. Set EMAIL_SERVICE, or EMAIL_HOST and EMAIL_PORT.'
     );
@@ -37,10 +67,7 @@ const getTransport = () => {
     host,
     port,
     secure: secure || port === 465,
-    auth: {
-      user,
-      pass,
-    },
+    auth,
   });
 };
 
@@ -51,6 +78,33 @@ const renderTemplate = (template, data) => {
 
 const getDefaultFrom = () =>
   process.env.EMAIL_FROM || `Estates Complaint <${process.env.EMAIL_USER}>`;
+
+const verifyTransporter = async (transporter, timeoutMs) => {
+  if (!transporter || typeof transporter.verify !== 'function') {
+    return true;
+  }
+
+  try {
+    await Promise.race([
+      transporter.verify(),
+      new Promise((_, reject) => {
+        setTimeout(
+          () => reject(new Error(`Email transporter verification timed out after ${timeoutMs}ms`)),
+          timeoutMs
+        );
+      }),
+    ]);
+
+    return true;
+  } catch (err) {
+    console.warn('Email transporter verification failed:', {
+      error: err instanceof Error ? err.message : String(err),
+      code: err?.code,
+      response: err?.response,
+    });
+    return false;
+  }
+};
 
 const sendEmail = async ({ to, subject, html, text }) => {
   const transporter = getTransport();
@@ -94,7 +148,13 @@ const sendEmail = async ({ to, subject, html, text }) => {
     text,
   };
 
-  const timeoutMs = Number(process.env.EMAIL_TIMEOUT_MS || process.env.SMTP_TIMEOUT_MS || 4000);
+  const timeoutMs = Number(process.env.EMAIL_TIMEOUT_MS || process.env.SMTP_TIMEOUT_MS || 20000);
+
+  const transporterVerified = await verifyTransporter(transporter, timeoutMs);
+  if (!transporterVerified) {
+    console.warn('Email transporter was not verified. Skipping email send.');
+    return null;
+  }
 
   try {
     const info = await Promise.race([
@@ -111,7 +171,7 @@ const sendEmail = async ({ to, subject, html, text }) => {
     return info;
   } catch (err) {
     console.warn('Email send failed:', {
-      error: err.message,
+      error: err instanceof Error ? err.message : String(err),
       to: recipients.join(', '),
       subject,
     });

@@ -151,6 +151,7 @@ backend/
 | `EMAIL_SERVICE`| Nodemailer service name   | gmail                                      |
 | `EMAIL_USER`   | SMTP sender email address | your-email@gmail.com                       |
 | `EMAIL_APP_PASSWORD` | SMTP app password   | your-gmail-app-password                    |
+| `EMAIL_TIMEOUT_MS` | Email send timeout in ms | 20000                                   |
 
 ## Email Configuration
 
