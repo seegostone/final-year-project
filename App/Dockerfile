@@ -12,6 +12,7 @@ RUN npm run build
 
 FROM nginx:stable-alpine AS runtime
 RUN apk add --no-cache ca-certificates
+ENV API_BACKEND_URL=http://backend:5000
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 EXPOSE 80
