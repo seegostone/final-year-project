@@ -184,10 +184,28 @@ const buildBaseTemplate = ({ title, body, bodyHtml, actionLabel, actionUrl }) =>
     <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
       <div style="max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background: #ffffff;">
         <h1 style="font-size: 22px; margin-bottom: 16px; color: #111827;">{{title}}</h1>
-        <div style="font-size: 16px; margin-bottom: 24px; color: #374151;">{{{bodyHtml}}}{{^bodyHtml}}{{body}}{{/bodyHtml}}</div>
+        <div style="font-size: 16px; margin-bottom: 24px; color: #374151;">
+          {{#if bodyHtml}}
+            {{{bodyHtml}}}
+          {{else}}
+            {{body}}
+          {{/if}}
+        </div>
+
         {{#if actionUrl}}
-          <a href="{{actionUrl}}" style="display: inline-block; padding: 12px 18px; background: #16a34a; color: #ffffff; text-decoration: none; border-radius: 8px;">{{actionLabel}}</a>
+          <div style="margin: 24px 0;">
+            <a href="{{actionUrl}}" style="display: inline-block; padding: 12px 18px; background: #16a34a; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600;">
+              {{actionLabel}}
+            </a>
+          </div>
         {{/if}}
+
+        {{#if actionUrl}}
+          <p style="margin-top: 8px; color: #6b7280; font-size: 13px; word-break: break-all;">
+            Or open: <a href="{{actionUrl}}" style="color: #2563eb; text-decoration: underline;">{{actionUrl}}</a>
+          </p>
+        {{/if}}
+
         <p style="margin-top: 24px; color: #6b7280; font-size: 14px;">If you did not expect this email, please ignore it.</p>
       </div>
     </div>
@@ -224,6 +242,17 @@ const buildNotificationAction = ({ role, route, actionLabel, showActionButton = 
   }
 
   const normalizedRoute = String(route);
+  const normalizedRole = normalizeEmailRole(role);
+  const complaintRoute = normalizedRoute.startsWith('/complaints/');
+  const submitterRoles = ['resident_staff', 'resident', 'warden', 'custodian', 'staff'];
+
+  if (complaintRoute && submitterRoles.includes(normalizedRole)) {
+    return {
+      actionLabel: actionLabel || 'View complaint',
+      actionUrl: `${frontendUrl}${normalizedRoute}`,
+    };
+  }
+
   const shouldUseDashboard =
     normalizedRoute === '/management/queue' ||
     normalizedRoute.startsWith('/complaints/') ||
