@@ -96,7 +96,10 @@ export const createComplaint = async (req, res, next) => {
           req.user.email,
           'Complaint submitted successfully',
           `Your complaint titled "${complaint.title}" has been received and is now pending review.`,
-          { route: `/complaints/${complaint._id.toString()}` }
+          {
+            route: `/complaints/${complaint._id.toString()}`,
+            role: req.user.normalizedRole || req.user.role,
+          }
         );
       }
     } catch (emailError) {
@@ -324,7 +327,10 @@ export const updateComplaintStatus = async (req, res) => {
               submitter.email,
               'Your complaint has been resolved',
               `We have resolved your complaint titled "${complaint.title}". Thank you for raising it.`,
-              { route: `/complaints/${complaint._id.toString()}` }
+              {
+                route: `/complaints/${complaint._id.toString()}`,
+                role: submitter.normalizedRole || submitter.role,
+              }
             );
           }
         }

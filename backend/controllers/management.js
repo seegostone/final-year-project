@@ -419,7 +419,10 @@ export const assignTask = async (req, res) => {
               technician.email,
               'A task has been assigned to you',
               `You have been assigned a new task for complaint ${updated.complaintId}.`,
-              { route: `/technician/tasks/${taskId}` }
+              {
+                route: `/technician/tasks/${taskId}`,
+                role: technician.normalizedRole || technician.role,
+              }
             );
           }
         }
@@ -795,7 +798,10 @@ export const requestResidentApproval = async (req, res) => {
             submitter.email,
             'Your work approval is requested',
             `Please review the completed work for complaint ${complaint.complaintId || complaint._id.toString()} and provide your feedback. ${message || ''}`,
-            { route: `/complaints/${complaint._id.toString()}` }
+            {
+              route: `/complaints/${complaint._id.toString()}`,
+              role: submitter.normalizedRole || submitter.role,
+            }
           );
         }
       }
@@ -950,7 +956,10 @@ export const recordResidentApproval = async (req, res) => {
               officer.email,
               'Resident approval response received',
               officerMessage,
-              { route: '/management/queue' }
+              {
+                route: '/management/queue',
+                role: officer.normalizedRole || officer.role,
+              }
             );
           }
         })
@@ -962,7 +971,10 @@ export const recordResidentApproval = async (req, res) => {
           submitter.email,
           'Your approval response has been recorded',
           `Your feedback for complaint ${complaint.complaintId || complaint._id.toString()} has been recorded successfully. Thank you for your response.`,
-          { route: `/complaints/${complaint._id.toString()}` }
+          {
+            route: `/complaints/${complaint._id.toString()}`,
+            role: submitter.normalizedRole || submitter.role,
+          }
         );
       }
     } catch (notifyError) {
@@ -1122,7 +1134,10 @@ export const escalateComplaint = async (req, res) => {
               targetUser.email,
               'Complaint escalated',
               `Complaint ${complaint.complaintId} has been escalated. Please review it at your earliest convenience.`,
-              { route: `/complaints/${complaint._id.toString()}` }
+              {
+                route: `/complaints/${complaint._id.toString()}`,
+                role: targetUser.normalizedRole || targetUser.role,
+              }
             );
           }
         }
@@ -1224,7 +1239,10 @@ export const closeComplaint = async (req, res) => {
               submitter.email,
               'Complaint closed',
               `Your complaint ${complaint.complaintId} has been closed. Thank you for your patience.`,
-              { route: `/complaints/${complaint._id.toString()}` }
+              {
+                route: `/complaints/${complaint._id.toString()}`,
+                role: submitter.normalizedRole || submitter.role,
+              }
             );
           }
         }

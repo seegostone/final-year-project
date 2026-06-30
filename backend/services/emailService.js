@@ -196,6 +196,57 @@ const buildBaseTemplate = ({ title, body, bodyHtml, actionLabel, actionUrl }) =>
   return renderTemplate(template, { title, body, bodyHtml, actionLabel, actionUrl });
 };
 
+const normalizeEmailRole = (role) => String(role || '').toLowerCase().trim();
+
+const getRoleBasedDashboardRoute = (role) => {
+  const normalizedRole = normalizeEmailRole(role);
+
+  if (['admin', 'estates_officer', 'officer', 'management'].includes(normalizedRole)) {
+    return '/admin/dashboard';
+  }
+
+  if (['technician', 'tech'].includes(normalizedRole)) {
+    return '/technician/dashboard';
+  }
+
+  if (['resident_staff', 'resident', 'warden', 'custodian', 'staff'].includes(normalizedRole)) {
+    return '/dashboard';
+  }
+
+  return null;
+};
+
+const buildNotificationAction = ({ role, route, actionLabel, showActionButton = true }) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+  if (showActionButton === false || !route) {
+    return { actionLabel: '', actionUrl: null };
+  }
+
+  const normalizedRoute = String(route);
+  const shouldUseDashboard =
+    normalizedRoute === '/management/queue' ||
+    normalizedRoute.startsWith('/complaints/') ||
+    normalizedRoute.startsWith('/technician/tasks/');
+
+  if (!shouldUseDashboard) {
+    return {
+      actionLabel: actionLabel || 'View details',
+      actionUrl: `${frontendUrl}${normalizedRoute}`,
+    };
+  }
+
+  const dashboardRoute = getRoleBasedDashboardRoute(role);
+  if (!dashboardRoute) {
+    return { actionLabel: '', actionUrl: null };
+  }
+
+  return {
+    actionLabel: actionLabel || 'Open dashboard',
+    actionUrl: `${frontendUrl}${dashboardRoute}`,
+  };
+};
+
 const sendVerificationEmail = async (email, token) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email/${encodeURIComponent(token)}`;
@@ -238,20 +289,24 @@ const sendResetPasswordEmail = async (email, token) => {
 };
 
 const sendNotificationEmail = async (email, subject, message, options = {}) => {
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  const actionUrl = options.route ? `${frontendUrl}${options.route}` : null;
+  const action = buildNotificationAction({
+    role: options.role,
+    route: options.route,
+    actionLabel: options.actionLabel,
+    showActionButton: options.showActionButton,
+  });
   const html = buildBaseTemplate({
     title: subject,
     body: message,
-    actionLabel: actionUrl ? 'View details' : '',
-    actionUrl,
+    actionLabel: action.actionLabel,
+    actionUrl: action.actionUrl,
   });
 
   return sendEmail({
     to: email,
     subject,
     html,
-    text: `${message}${actionUrl ? `\n\n${actionUrl}` : ''}`,
+    text: `${message}${action.actionUrl ? `\n\n${action.actionUrl}` : ''}`,
   });
 };
 

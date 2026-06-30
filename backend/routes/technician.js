@@ -480,7 +480,10 @@ router.patch(
                   officer.email,
                   notificationTitle,
                   notificationMessage,
-                  { route: '/management/queue' }
+                  {
+                    route: '/management/queue',
+                    role: officer.normalizedRole || officer.role,
+                  }
                 );
               }
             })
