@@ -73,9 +73,10 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, submitting = false,
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 rounded-none"
           >
-            <div className="bg-white w-full max-w-[900px] h-[90vh] overflow-hidden border border-slate-200 shadow-none">
+            <div className="bg-white w-full max-w-[900px] h-[90vh] overflow-hidden border border-slate-200 shadow-none rounded-none"
+                 style={{ borderRadius: 0 }}>
               <div className="sticky top-0 z-20 bg-white border-b border-slate-200 px-6 py-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="space-y-2">
                   <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Work Report</p>
@@ -162,6 +163,55 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, submitting = false,
                     </div>
                   </div>
 
+                  <div className="grid gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-sm font-medium text-slate-900">Attach Images (optional)</label>
+                      <span className="text-xs text-slate-500">{uploadHint}</span>
+                    </div>
+                    <div className="border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center">
+                      <label
+                        htmlFor="taskImages"
+                        className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-none border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                      >
+                        <ImageIcon className="h-4 w-4" />
+                        Choose images
+                      </label>
+                      <input
+                        id="taskImages"
+                        name="taskImages"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      <p className="mt-3 text-sm text-slate-500">
+                        Drag and drop or click to select up to 5 photos for task evidence.
+                      </p>
+                    </div>
+                    {images.length > 0 ? (
+                      <div className="grid grid-cols-3 gap-3">
+                        {imagePreviews.map((item, index) => (
+                          <div key={index} className="relative overflow-hidden border border-slate-200 bg-slate-100">
+                            <img src={item.preview} alt={`Preview ${index + 1}`} className="h-28 w-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removeImage(index)}
+                              className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-none bg-white/90 text-slate-600 transition hover:bg-white"
+                              aria-label={`Remove image ${index + 1}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-none border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                        No images attached yet.
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid gap-3 sm:grid-cols-[1fr_0.6fr]">
                     <div className="grid gap-3">
                       <label htmlFor="hoursSpent" className="text-sm font-medium text-slate-900">
@@ -186,49 +236,6 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, submitting = false,
                         {materialsUsed.length > 0 ? 'Ready to resolve' : 'Add materials to proceed'}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="grid gap-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <label className="text-sm font-medium text-slate-900">Attach Images (optional)</label>
-                      <span className="text-xs text-slate-500">{uploadHint}</span>
-                    </div>
-                    <div className="border border-slate-300 bg-slate-50 px-4 py-5 text-center">
-                      <label
-                        htmlFor="taskImages"
-                        className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-none border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                      >
-                        <ImageIcon className="h-4 w-4" />
-                        Choose images
-                      </label>
-                      <input
-                        id="taskImages"
-                        name="taskImages"
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
-                      <p className="mt-3 text-sm text-slate-500">Drag and drop or select up to 5 photos to attach evidence to the work report.</p>
-                    </div>
-                    {images.length > 0 && (
-                      <div className="grid grid-cols-3 gap-3">
-                        {imagePreviews.map((item, index) => (
-                          <div key={index} className="relative overflow-hidden border border-slate-200 bg-slate-100">
-                            <img src={item.preview} alt={`Preview ${index + 1}`} className="h-28 w-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={() => removeImage(index)}
-                              className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-none bg-white/90 text-slate-600 transition hover:bg-white"
-                              aria-label={`Remove image ${index + 1}`}
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
                   <div className="grid gap-3">
