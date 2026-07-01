@@ -124,12 +124,7 @@ const technicianService = {
 
       const response = await axiosInstance.patch(
         `/technician/tasks/${complaintId}/${taskId}/status`,
-        formData,
-        {
-          headers: {
-            'Content-Type': undefined,
-          },
-        }
+        formData
       );
       
       if (response.success) {
