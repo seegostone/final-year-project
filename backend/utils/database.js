@@ -1552,23 +1552,22 @@ export const managementOperations = {
   async unassignTaskFromComplaint(db, complaintId, taskId, unassignedBy) {
     const complaints = db.collection('complaints');
 
-    const taskFilter = ObjectId.isValid(taskId)
-      ? { 'tasks._id': new ObjectId(taskId) }
-      : { 'tasks._id': taskId };
+    // Normalize taskId to ObjectId if possible to match stored values
+    const taskIdObj = ObjectId.isValid(taskId) ? new ObjectId(taskId) : taskId;
+    const unassignedByObj = ObjectId.isValid(unassignedBy) ? new ObjectId(unassignedBy) : unassignedBy;
 
-    // Try to update atomically, only if task exists, is not done, and has an assignee
+    // Use $elemMatch to ensure the same array element satisfies all conditions,
+    // then use arrayFilters to update that specific element reliably.
     const result = await complaints.updateOne(
       {
         _id: new ObjectId(complaintId),
-        ...taskFilter,
-        'tasks.status': { $ne: 'done' },
-        'tasks.assigneeId': { $ne: null }
+        tasks: { $elemMatch: { _id: taskIdObj, status: { $ne: 'done' }, assigneeId: { $ne: null } } },
       },
       {
         $set: {
-          'tasks.$.assigneeId': null,
-          'tasks.$.assigneeName': null,
-          'tasks.$.assignedAt': null,
+          'tasks.$[elem].assigneeId': null,
+          'tasks.$[elem].assigneeName': null,
+          'tasks.$[elem].assignedAt': null,
           updatedAt: new Date(),
         },
         $push: {
@@ -1576,16 +1575,19 @@ export const managementOperations = {
             action: 'task_unassigned',
             from: 'assigned',
             to: 'unassigned',
-            by: unassignedBy,
+            by: unassignedByObj,
             byName: 'Estates Officer',
             byRole: 'estates_officer',
             note: `Task ${taskId} unassigned`,
           }),
         },
+      },
+      {
+        arrayFilters: [{ 'elem._id': taskIdObj }],
       }
     );
 
-    if (result.modifiedCount === 0) return null;
+    if (!result || result.modifiedCount === 0) return null;
 
     return await complaints.findOne({ _id: new ObjectId(complaintId) });
   }
