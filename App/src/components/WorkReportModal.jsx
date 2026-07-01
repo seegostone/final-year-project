@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }) {
@@ -55,6 +55,9 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
     });
   };
 
+  const isSubmitDisabled = !actionsTaken.trim() || materialsUsed.length === 0 || !hoursSpent;
+  const uploadHint = images.length >= 5 ? 'Maximum 5 images attached' : `${5 - images.length} image(s) left`;
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -63,184 +66,200 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-50"
+            className="fixed inset-0 bg-slate-950/40 z-50"
             onClick={onClose}
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
+            exit={{ opacity: 0, scale: 0.96 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ fontFamily: 'Inter, sans-serif' }}
           >
-            <div className="bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b border-[#e2e8f0] p-6 flex items-start justify-between">
-                <div>
-                  <h2 className="font-bold text-[#1e2937]" style={{ fontFamily: 'Merriweather, serif', fontSize: '24px' }}>
-                    Work Report - {taskId}
+            <div className="bg-white w-full max-w-3xl max-h-[92vh] overflow-hidden rounded-[28px] shadow-2xl ring-1 ring-slate-200">
+              <div className="sticky top-0 z-20 bg-white border-b border-slate-200 px-6 py-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Work Report</p>
+                  <h2 className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'Merriweather, serif' }}>
+                    {taskId}
                   </h2>
-                  <p className="text-[#475569] mt-1" style={{ fontSize: '14px' }}>
-                    {taskTitle}
-                  </p>
+                  <p className="text-sm text-slate-600">{taskTitle}</p>
                 </div>
-                <button onClick={onClose} className="text-[#94a3b8] hover:text-[#475569]">
-                  <X className="w-6 h-6" />
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                  aria-label="Close work report modal"
+                >
+                  <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                <div>
-                  <label className="block text-[#1e2937] mb-2" style={{ fontSize: '14px', fontWeight: 500 }}>
-                    Actions Taken <span className="text-red-600">*</span>
-                  </label>
-                  <textarea
-                    id="actionsTaken"
-                    name="actionsTaken"
-                    required
-                    value={actionsTaken}
-                    onChange={(e) => setActionsTaken(e.target.value)}
-                    maxLength={500}
-                    rows={4}
-                    className="w-full border border-[#e2e8f0] p-3 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
-                    placeholder="Describe the work performed..."
-                    style={{ fontSize: '14px' }}
-                  />
-                  <div className="text-right text-[#94a3b8] mt-1" style={{ fontSize: '12px' }}>
-                    {actionsTaken.length}/500
-                  </div>
+              <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-sm text-slate-600">
+                    Add a summary of the work performed, note materials used, and attach up to 5 images. Required fields are marked with <span className="font-semibold">*</span>.
+                  </p>
                 </div>
 
-                <div>
-                  <label className="block text-[#1e2937] mb-2" style={{ fontSize: '14px', fontWeight: 500 }}>
-                    Materials Used <span className="text-red-600">*</span>
-                  </label>
-                  <div className="flex gap-2 mb-3">
-                    <input
-                      id="currentMaterial"
-                      name="currentMaterial"
-                      type="text"
-                      value={currentMaterial}
-                      onChange={(e) => setCurrentMaterial(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addMaterial())}
-                      className="flex-1 border border-[#e2e8f0] p-3 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
-                      placeholder="Enter material name"
-                      style={{ fontSize: '14px' }}
+                <div className="grid gap-6">
+                  <div className="grid gap-3">
+                    <label htmlFor="actionsTaken" className="text-sm font-medium text-slate-900">
+                      Actions Taken <span className="text-rose-600">*</span>
+                    </label>
+                    <textarea
+                      id="actionsTaken"
+                      name="actionsTaken"
+                      required
+                      value={actionsTaken}
+                      onChange={(e) => setActionsTaken(e.target.value)}
+                      maxLength={500}
+                      rows={5}
+                      className="w-full rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-300"
+                      placeholder="Describe the work performed..."
                     />
-                    <button
-                      type="button"
-                      onClick={addMaterial}
-                      className="px-4 bg-[#1e3a5f] text-white hover:bg-[#2d4a6f] transition-colors flex items-center gap-2"
-                      style={{ fontSize: '14px' }}
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add
-                    </button>
+                    <div className="text-right text-xs text-slate-500">{actionsTaken.length}/500</div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {materialsUsed.map((material, index) => (
-                      <span
-                        key={index}
-                        className="bg-[#eef2f7] text-[#1e3a5f] px-3 py-1 flex items-center gap-2"
-                        style={{ fontSize: '14px' }}
+
+                  <div className="grid gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <label htmlFor="currentMaterial" className="text-sm font-medium text-slate-900">
+                        Materials Used <span className="text-rose-600">*</span>
+                      </label>
+                      <span className="text-xs text-slate-500">Press Enter or Add</span>
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <input
+                        id="currentMaterial"
+                        name="currentMaterial"
+                        type="text"
+                        value={currentMaterial}
+                        onChange={(e) => setCurrentMaterial(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addMaterial())}
+                        className="flex-1 rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-300"
+                        placeholder="Enter material name"
+                      />
+                      <button
+                        type="button"
+                        onClick={addMaterial}
+                        className="inline-flex items-center justify-center rounded-3xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                       >
-                        {material}
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {materialsUsed.map((material, index) => (
                         <button
+                          key={index}
                           type="button"
                           onClick={() => removeMaterial(index)}
-                          className="text-[#475569] hover:text-[#1e2937]"
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700 transition hover:border-slate-300"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <span>{material}</span>
+                          <X className="h-3.5 w-3.5 text-slate-500" />
                         </button>
-                      </span>
-                    ))}
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-[1fr_0.6fr]">
+                    <div className="grid gap-3">
+                      <label htmlFor="hoursSpent" className="text-sm font-medium text-slate-900">
+                        Hours Spent <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        id="hoursSpent"
+                        name="hoursSpent"
+                        type="number"
+                        required
+                        step="0.5"
+                        min="0"
+                        value={hoursSpent}
+                        onChange={(e) => setHoursSpent(e.target.value)}
+                        className="w-full rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-300"
+                        placeholder="0.0 hours"
+                      />
+                    </div>
+                    <div className="grid gap-3">
+                      <label className="text-sm font-medium text-slate-900">Status</label>
+                      <div className="rounded-3xl border border-slate-200 bg-slate-100 px-4 py-4 text-sm text-slate-700">
+                        {materialsUsed.length > 0 ? 'Ready to resolve' : 'Add materials to proceed'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-sm font-medium text-slate-900">Attach Images (optional)</label>
+                      <span className="text-xs text-slate-500">{uploadHint}</span>
+                    </div>
+                    <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center">
+                      <label
+                        htmlFor="taskImages"
+                        className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                      >
+                        <ImageIcon className="h-4 w-4" />
+                        Choose images
+                      </label>
+                      <input
+                        id="taskImages"
+                        name="taskImages"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      <p className="mt-3 text-sm text-slate-500">Drag and drop or select up to 5 photos to attach evidence to the work report.</p>
+                    </div>
+                    {images.length > 0 && (
+                      <div className="grid grid-cols-3 gap-3">
+                        {imagePreviews.map((item, index) => (
+                          <div key={index} className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
+                            <img src={item.preview} alt={`Preview ${index + 1}`} className="h-28 w-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removeImage(index)}
+                              className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-600 shadow-sm transition hover:bg-white"
+                              aria-label={`Remove image ${index + 1}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid gap-3">
+                    <label htmlFor="additionalNotes" className="text-sm font-medium text-slate-900">
+                      Additional Notes (optional)
+                    </label>
+                    <textarea
+                      id="additionalNotes"
+                      name="additionalNotes"
+                      value={additionalNotes}
+                      onChange={(e) => setAdditionalNotes(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-300"
+                      placeholder="Any additional information..."
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[#1e2937] mb-2" style={{ fontSize: '14px', fontWeight: 500 }}>
-                    Hours Spent <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    id="hoursSpent"
-                    name="hoursSpent"
-                    type="number"
-                    required
-                    step="0.5"
-                    min="0"
-                    value={hoursSpent}
-                    onChange={(e) => setHoursSpent(e.target.value)}
-                    className="w-full border border-[#e2e8f0] p-3 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
-                    placeholder="0.0 hours"
-                    style={{ fontSize: '14px' }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[#1e2937] mb-2" style={{ fontSize: '14px', fontWeight: 500 }}>
-                    Attach Images (optional)
-                  </label>
-                  <input
-                    id="taskImages"
-                    name="taskImages"
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleFileChange}
-                    className="w-full text-sm text-slate-600"
-                    style={{ fontSize: '14px' }}
-                  />
-                  {images.length > 0 && (
-                    <div className="mt-3 grid grid-cols-3 gap-3">
-                      {imagePreviews.map((item, index) => (
-                        <div key={index} className="relative border border-[#e2e8f0] rounded overflow-hidden">
-                          <img
-                            src={item.preview}
-                            alt={`Preview ${index + 1}`}
-                            className="h-24 w-full object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeImage(index)}
-                            className="absolute top-1 right-1 rounded-full bg-white/90 p-1 text-[#475569] hover:text-[#1e2937]"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-[#1e2937] mb-2" style={{ fontSize: '14px', fontWeight: 500 }}>
-                    Additional Notes (optional)
-                  </label>
-                  <textarea
-                    id="additionalNotes"
-                    name="additionalNotes"
-                    value={additionalNotes}
-                    onChange={(e) => setAdditionalNotes(e.target.value)}
-                    rows={2}
-                    className="w-full border border-[#e2e8f0] p-3 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
-                    placeholder="Any additional information..."
-                    style={{ fontSize: '14px' }}
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <button
                     type="submit"
-                    disabled={!actionsTaken || materialsUsed.length === 0 || !hoursSpent}
-                    className="flex-1 px-6 py-3 bg-[#059669] text-white hover:bg-[#047857] disabled:bg-[#cbd5e1] disabled:cursor-not-allowed transition-colors"
-                    style={{ fontSize: '14px', fontWeight: 500 }}
+                    disabled={isSubmitDisabled}
+                    className="flex-1 rounded-3xl bg-slate-900 px-6 py-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed"
                   >
                     Resolve Task
                   </button>
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-6 py-3 border border-[#e2e8f0] text-[#475569] hover:bg-[#f8fafc] transition-colors"
-                    style={{ fontSize: '14px', fontWeight: 500 }}
+                    className="rounded-3xl border border-slate-200 bg-white px-6 py-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
                   >
                     Cancel
                   </button>

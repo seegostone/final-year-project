@@ -6,10 +6,10 @@ import { PriorityBadge } from './PriorityBadge';
 import { formatDistanceToNow } from 'date-fns';
 
 const statusBorderColors = {
-  'In Progress': 'border-l-[3px] border-l-purple-600',
-  'Assigned': 'border-l-[3px] border-l-blue-600',
-  'Resolved': 'border-l-[3px] border-l-emerald-600',
-  'Pending': 'border-l-[3px] border-l-amber-600',
+  'In Progress': 'border-l-[4px] border-l-purple-600',
+  'Assigned': 'border-l-[4px] border-l-blue-600',
+  'Resolved': 'border-l-[4px] border-l-emerald-600',
+  'Pending': 'border-l-[4px] border-l-amber-600',
 };
 
 export function TaskCard({ task, delay = 0 }) {
@@ -22,8 +22,8 @@ export function TaskCard({ task, delay = 0 }) {
     : formatDistanceToNow(dueDate, { addSuffix: true });
 
   const borderClass = isOverdue
-    ? 'border-l-[3px] border-l-red-600'
-    : statusBorderColors[displayStatus] || 'border-l-[3px] border-l-gray-300';
+    ? 'border-l-[4px] border-l-red-600'
+    : statusBorderColors[displayStatus] || 'border-l-[4px] border-l-slate-300';
 
   const complaintSegment = task.complaintLabel || task.complaintId || task.id;
   const locationLabel = task.location || task.complaintLocation || 'Unknown location';
@@ -34,60 +34,66 @@ export function TaskCard({ task, delay = 0 }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
-      whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}
+      whileHover={{ scale: 1.02, boxShadow: '0 18px 45px rgba(15, 23, 42, 0.08)' }}
       onClick={() => navigate(`/task/${complaintSegment}/${task.taskId}`)}
-      className={`bg-white border border-[#e2e8f0] ${borderClass} p-5 cursor-pointer transition-all`}
+      className={`group cursor-pointer rounded-[28px] border border-slate-200 bg-white p-5 transition-all duration-200 ${borderClass}`}
       style={{ fontFamily: 'Inter, sans-serif' }}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1">
-          <h3 className="font-bold text-[#1e2937] mb-1" style={{ fontFamily: 'Merriweather, serif', fontSize: '16px' }}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold text-slate-900" style={{ fontFamily: 'Merriweather, serif' }}>
             {task.title}
           </h3>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+            {task.complaintLabel && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">{task.complaintLabel}</span>
+            )}
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-500">{task.taskId}</span>
+          </div>
         </div>
         <PriorityBadge priority={task.priority} />
       </div>
 
-      <div className="space-y-3 text-[#475569] mb-3" style={{ fontSize: '14px' }}>
-        <div className="flex flex-wrap items-center gap-2">
-          <MapPin className="w-4 h-4" />
+      <div className="mt-5 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+        <div className="flex items-center gap-2 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <MapPin className="h-4 w-4 text-slate-500" />
           <span>{locationLabel}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <User className="w-4 h-4" />
+        <div className="flex items-center gap-2 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <User className="h-4 w-4 text-slate-500" />
           <span>{assignedLabel}</span>
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <StatusBadge status={displayStatus} />
-        <div className={`flex items-center gap-1.5 ${isOverdue ? 'text-red-600' : 'text-[#475569]'}`} style={{ fontSize: '12px' }}>
-          <Clock className="w-3.5 h-3.5" />
-          <span>{timeLeftLabel}</span>
+        <div className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ${isOverdue ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'}`}>
+          <Clock className="h-3.5 w-3.5" />
+          {timeLeftLabel}
         </div>
       </div>
 
       {displayStatus === 'Resolved' && task.workReport && (
-        <div className="mt-4 bg-[#f8fafc] border border-[#e2e8f0] p-3 rounded">
-          <div className="flex items-center gap-2 text-[#1e2937] font-semibold mb-2" style={{ fontSize: '13px' }}>
-            <Camera className="w-4 h-4" />
-            <span>Work Report</span>
+        <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <Camera className="h-4 w-4 text-slate-700" />
+            <span>Work Report Summary</span>
           </div>
-          <p className="text-[#475569] text-sm mb-2" style={{ fontSize: '13px' }}>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
             {task.workReport.actionsTaken || 'No summary provided.'}
           </p>
           {task.workReport.images?.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto py-1">
+            <div className="mt-4 flex items-center gap-2 overflow-x-auto py-1">
               {task.workReport.images.slice(0, 3).map((src, index) => (
                 <img
                   key={index}
                   src={src}
                   alt={`Report image ${index + 1}`}
-                  className="h-12 w-12 rounded object-cover border border-[#e2e8f0]"
+                  className="h-14 w-14 rounded-2xl object-cover border border-slate-200"
                 />
               ))}
               {task.workReport.images.length > 3 && (
-                <span className="text-[#475569] text-xs">+{task.workReport.images.length - 3} more</span>
+                <span className="text-xs text-slate-500">+{task.workReport.images.length - 3} more</span>
               )}
             </div>
           )}
@@ -95,16 +101,10 @@ export function TaskCard({ task, delay = 0 }) {
       )}
 
       {task.submitterName && (
-        <div className="mt-3 text-sm text-slate-500">
-          <span className="font-semibold text-slate-900">Submitted by:</span> {task.submitterName}
+        <div className="mt-5 text-sm text-slate-500">
+          <span className="font-medium text-slate-800">Submitted by:</span> {task.submitterName}
         </div>
       )}
-
-      <div className="mt-3 pt-3 border-t border-[#e2e8f0]">
-        <span className="font-mono text-[#94a3b8]" style={{ fontSize: '10px' }}>
-          {task.complaintLabel || task.complaintId || task.id}
-        </span>
-      </div>
     </motion.div>
   );
 }
