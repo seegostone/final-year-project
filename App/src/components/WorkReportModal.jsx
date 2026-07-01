@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -8,6 +8,18 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
   const [currentMaterial, setCurrentMaterial] = useState('');
   const [hoursSpent, setHoursSpent] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
+  const [images, setImages] = useState([]);
+
+  const imagePreviews = useMemo(
+    () => images.map((file) => ({ file, preview: URL.createObjectURL(file) })),
+    [images]
+  );
+
+  useEffect(() => {
+    return () => {
+      imagePreviews.forEach(({ preview }) => URL.revokeObjectURL(preview));
+    };
+  }, [imagePreviews]);
 
   const addMaterial = () => {
     if (currentMaterial.trim()) {
@@ -20,6 +32,18 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
     setMaterialsUsed(materialsUsed.filter((_, i) => i !== index));
   };
 
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length) {
+      setImages((prev) => [...prev, ...files].slice(0, 5));
+    }
+    e.target.value = null;
+  };
+
+  const removeImage = (index) => {
+    setImages(images.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     onSubmit({
@@ -27,6 +51,7 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
       materialsUsed,
       hoursSpent: parseFloat(hoursSpent),
       additionalNotes,
+      images,
     });
   };
 
@@ -148,6 +173,42 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
                     placeholder="0.0 hours"
                     style={{ fontSize: '14px' }}
                   />
+                </div>
+
+                <div>
+                  <label className="block text-[#1e2937] mb-2" style={{ fontSize: '14px', fontWeight: 500 }}>
+                    Attach Images (optional)
+                  </label>
+                  <input
+                    id="taskImages"
+                    name="taskImages"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFileChange}
+                    className="w-full text-sm text-slate-600"
+                    style={{ fontSize: '14px' }}
+                  />
+                  {images.length > 0 && (
+                    <div className="mt-3 grid grid-cols-3 gap-3">
+                      {imagePreviews.map((item, index) => (
+                        <div key={index} className="relative border border-[#e2e8f0] rounded overflow-hidden">
+                          <img
+                            src={item.preview}
+                            alt={`Preview ${index + 1}`}
+                            className="h-24 w-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeImage(index)}
+                            className="absolute top-1 right-1 rounded-full bg-white/90 p-1 text-[#475569] hover:text-[#1e2937]"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>

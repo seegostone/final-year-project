@@ -104,16 +104,26 @@ export function TaskDetail() {
     
     try {
       setSubmitting(true);
-      await technicianService.updateTaskStatus(
+      const response = await technicianService.updateTaskStatus(
         complaintId,
         taskId,
         {
           status: 'done',
           workReport: report,
-        }
+        },
+        report.images || []
       );
       const newStatus = technicianService.mapStatusToDisplay('done');
-      setTask((prev) => prev ? { ...prev, status: 'done', displayStatus: newStatus, workReport: report } : prev);
+      setTask((prev) => prev ? {
+        ...prev,
+        status: 'done',
+        displayStatus: newStatus,
+        workReport: {
+          ...report,
+          images: response.data?.workReport?.images || report.images || [],
+        },
+        images: response.data?.images || report.images || [],
+      } : prev);
       setTaskStatus(newStatus);
       emitAppEvent('notificationsUpdated');
       emitAppEvent('queueUpdated');
@@ -205,7 +215,9 @@ export function TaskDetail() {
   const displayStatus = taskStatus || task.displayStatus;
   const activityLogs = task.activityLog || [];
   const dueDate = new Date(task.dueDate || task.deadline);
-  const daysLeft = Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+  const daysLeft = displayStatus === 'Resolved'
+    ? null
+    : Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
   const complaintLabel = task.complaintLabel || task.complaintId || complaintId;
   
   // Build readable task code: prefer backend taskCode, fallback to generated format, then raw ID
@@ -274,14 +286,14 @@ export function TaskDetail() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div>
                   <h3 className="text-[#94a3b8] mb-2" style={{ fontSize: '12px', fontWeight: 500, letterSpacing: '0.5px' }}>
                     LOCATION
                   </h3>
                   <div className="flex items-center gap-2 text-[#1e2937]" style={{ fontSize: '14px' }}>
                     <MapPin className="w-4 h-4" />
-                    <span>{task.location}</span>
+                    <span>{task.location || task.complaintLocation || 'Unknown location'}</span>
                   </div>
                 </div>
                 <div>
@@ -290,7 +302,16 @@ export function TaskDetail() {
                   </h3>
                   <div className="flex items-center gap-2 text-[#1e2937]" style={{ fontSize: '14px' }}>
                     <User className="w-4 h-4" />
-                    <span>{task.assignedTo}</span>
+                    <span>{task.assignedTo || task.assigneeName || 'Unassigned'}</span>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-[#94a3b8] mb-2" style={{ fontSize: '12px', fontWeight: 500, letterSpacing: '0.5px' }}>
+                    SUBMITTED BY
+                  </h3>
+                  <div className="flex items-center gap-2 text-[#1e2937]" style={{ fontSize: '14px' }}>
+                    <User className="w-4 h-4" />
+                    <span>{task.submitterName || 'Resident'}</span>
                   </div>
                 </div>
                 <div>
@@ -300,6 +321,15 @@ export function TaskDetail() {
                   <div className="flex items-center gap-2 text-[#1e2937]" style={{ fontSize: '14px' }}>
                     <Calendar className="w-4 h-4" />
                     <span>{format(dueDate, 'MMM dd, yyyy')}</span>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-[#94a3b8] mb-2" style={{ fontSize: '12px', fontWeight: 500, letterSpacing: '0.5px' }}>
+                    SLA STATUS
+                  </h3>
+                  <div className="flex items-center gap-2 text-[#1e2937]" style={{ fontSize: '14px' }}>
+                    <Clock className="w-4 h-4" />
+                    <span>{displayStatus === 'Resolved' ? 'SLA stopped' : (daysLeft > 0 ? `${daysLeft}d left` : 'Overdue')}</span>
                   </div>
                 </div>
               </div>

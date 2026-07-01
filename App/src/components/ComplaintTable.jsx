@@ -81,7 +81,8 @@ function ComplaintTable({ complaints = [], loading, onRowClick, STATUS_BADGE, st
               const tasks = Array.isArray(c.tasks) ? c.tasks : [];
               const doneTasks = tasks.filter((t) => t.status === 'done').length;
               const overdueTasks = tasks.filter((t) => t.status !== 'done' && t.deadline && new Date(t.deadline) < new Date()).length;
-              const isSlaBreached = c.slaDeadline && new Date(c.slaDeadline) < new Date() && c.status !== 'closed';
+              const isFinished = c.status === 'closed' || c.status === 'resolved';
+              const isSlaBreached = c.slaDeadline && new Date(c.slaDeadline) < new Date() && !isFinished;
 
               return (
                 <tr key={c._id} onClick={() => onRowClick(c)} className={`border-b border-slate-100 cursor-pointer transition-colors hover:bg-[#eef2f7]/70 ${isSlaBreached ? 'bg-rose-50/25' : ''}`}>
@@ -96,7 +97,7 @@ function ComplaintTable({ complaints = [], loading, onRowClick, STATUS_BADGE, st
                   <td className="px-4 py-3"><span className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded-none px-2 py-0.5 whitespace-nowrap">{c.category}</span></td>
                   <td className="px-4 py-3"><PriorityBadge priority={c.priority} /></td>
                   <td className="px-4 py-3"><StatusBadge status={c.status} STATUS_BADGE={STATUS_BADGE} statusLabel={statusLabel} /></td>
-                  <td className="px-4 py-3">{c.status === 'closed' ? (<span className="text-xs text-emerald-600 font-medium">Completed</span>) : c.slaDeadline ? (<span className={`text-xs flex items-center gap-1 whitespace-nowrap ${sla.cls}`}>{isSlaBreached ? <AlertTriangle className="h-3 w-3 shrink-0" /> : <Clock className="h-3 w-3 shrink-0" />}{sla.label}</span>) : (<span className="text-xs text-slate-300">—</span>)}</td>
+                  <td className="px-4 py-3">{isFinished ? (<span className="text-xs text-emerald-600 font-medium">SLA stopped</span>) : c.slaDeadline ? (<span className={`text-xs flex items-center gap-1 whitespace-nowrap ${sla.cls}`}>{isSlaBreached ? <AlertTriangle className="h-3 w-3 shrink-0" /> : <Clock className="h-3 w-3 shrink-0" />}{sla.label}</span>) : (<span className="text-xs text-slate-300">—</span>)}</td>
                   <td className="px-4 py-3">{tasks.length > 0 ? (<div className="flex items-center gap-1.5 whitespace-nowrap"><span className="text-xs text-slate-600 font-medium">{doneTasks}/{tasks.length}</span>{overdueTasks > 0 && (<span className="text-xs text-rose-600 flex items-center gap-0.5"><AlertTriangle className="h-2.5 w-2.5" />{overdueTasks}</span>)}</div>) : (<span className="text-xs text-slate-300">—</span>)}</td>
                   <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{formatDate(c.createdAt)}</td>
                 </tr>

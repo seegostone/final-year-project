@@ -119,6 +119,12 @@ const formatDateTime = (dateString) => {
   });
 };
 
+const normalizeRole = (role) =>
+  String(role || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+
 const formatRangeLabel = ({ timeFilter, customStartDate, customEndDate }) => {
   if (timeFilter === 'custom') {
     if (customStartDate && customEndDate) {
@@ -1131,18 +1137,16 @@ export default function ComplaintDashboard() {
                               </td>
                               <td className="px-6 py-4 text-slate-600">{formatDate(complaint.createdAt)}</td>
                               <td className="px-6 py-4 space-y-2">
-                                <button
-                                  type="button"
-                                  onClick={() => complaint.residentValidation?.isPending && !complaint.residentValidation?.status
-                                    ? handleStartResponse(complaint._id)
-                                    : navigate(`/complaints/${complaint._id}`)}
-                                  className="inline-flex items-center gap-2 bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200 transition-colors"
-                                  title={complaint.residentValidation?.isPending && !complaint.residentValidation?.status
-                                    ? 'Respond to approval request'
-                                    : 'View complaint details'}
-                                >
-                                  {complaint.residentValidation?.isPending && !complaint.residentValidation?.status ? 'Respond' : 'View'}
-                                </button>
+                                {complaint.residentValidation?.isPending && !complaint.residentValidation?.status && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartResponse(complaint._id)}
+                                    className="inline-flex items-center gap-2 bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200 transition-colors"
+                                    title="Respond to approval request"
+                                  >
+                                    Respond
+                                  </button>
+                                )}
                                 {complaint.status === 'pending' && (
                                   <button
                                     onClick={() => handleDeleteComplaint(complaint._id)}

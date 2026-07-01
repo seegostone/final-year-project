@@ -865,12 +865,14 @@ export function ComplaintDetailDrawer({ complaint: complaint, technicians, onClo
                                         {task.assigneeName ?? (technicians.find((t) => t._id === task.assigneeId)?.name ?? 'Assigned')}
                                       </span>
                                     </span>
-                                    <button
-                                      className="text-xs text-rose-600 hover:underline whitespace-nowrap"
-                                      onClick={() => handleUnassignTask(complaint._id, task._id)}
-                                    >
-                                      Unassign
-                                    </button>
+                                    {task.status !== 'done' && (
+                                      <button
+                                        className="text-xs text-rose-600 hover:underline whitespace-nowrap"
+                                        onClick={() => handleUnassignTask(complaint._id, task._id)}
+                                      >
+                                        Unassign
+                                      </button>
+                                    )}
                                   </div>
                                 ) : (
                                   <button

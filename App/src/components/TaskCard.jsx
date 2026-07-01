@@ -1,4 +1,4 @@
-import { MapPin, Clock } from 'lucide-react';
+import { Camera, MapPin, Clock, User } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from './StatusBadge';
@@ -16,14 +16,18 @@ export function TaskCard({ task, delay = 0 }) {
   const navigate = useNavigate();
   const dueDate = new Date(task.dueDate);
   const displayStatus = task.displayStatus || task.status;
-  const isOverdue = dueDate < new Date() && displayStatus !== 'Resolved';
-  const timeLeft = formatDistanceToNow(dueDate, { addSuffix: true });
+  const isOverdue = displayStatus !== 'Resolved' && dueDate < new Date();
+  const timeLeftLabel = displayStatus === 'Resolved'
+    ? 'Resolved'
+    : formatDistanceToNow(dueDate, { addSuffix: true });
 
-  const borderClass = isOverdue && displayStatus !== 'Resolved'
+  const borderClass = isOverdue
     ? 'border-l-[3px] border-l-red-600'
     : statusBorderColors[displayStatus] || 'border-l-[3px] border-l-gray-300';
 
   const complaintSegment = task.complaintLabel || task.complaintId || task.id;
+  const locationLabel = task.location || task.complaintLocation || 'Unknown location';
+  const assignedLabel = task.assignedTo || task.assigneeName || (task.assigneeId ? 'Assigned' : 'Unassigned');
 
   return (
     <motion.div
@@ -44,28 +48,61 @@ export function TaskCard({ task, delay = 0 }) {
         <PriorityBadge priority={task.priority} />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-[#475569] mb-3" style={{ fontSize: '14px' }}>
-        <MapPin className="w-4 h-4" />
-        <span>{task.location}</span>
-        {task.taskCode && (
-          <span className="font-mono text-xs text-[#64748b] bg-slate-100 px-2 py-1 rounded">
-            {task.taskCode}
-          </span>
-        )}
+      <div className="space-y-3 text-[#475569] mb-3" style={{ fontSize: '14px' }}>
+        <div className="flex flex-wrap items-center gap-2">
+          <MapPin className="w-4 h-4" />
+          <span>{locationLabel}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <User className="w-4 h-4" />
+          <span>{assignedLabel}</span>
+        </div>
       </div>
 
       <div className="flex items-center justify-between">
         <StatusBadge status={displayStatus} />
-        
         <div className={`flex items-center gap-1.5 ${isOverdue ? 'text-red-600' : 'text-[#475569]'}`} style={{ fontSize: '12px' }}>
           <Clock className="w-3.5 h-3.5" />
-          <span>{isOverdue ? 'Overdue' : timeLeft}</span>
+          <span>{timeLeftLabel}</span>
         </div>
       </div>
 
+      {displayStatus === 'Resolved' && task.workReport && (
+        <div className="mt-4 bg-[#f8fafc] border border-[#e2e8f0] p-3 rounded">
+          <div className="flex items-center gap-2 text-[#1e2937] font-semibold mb-2" style={{ fontSize: '13px' }}>
+            <Camera className="w-4 h-4" />
+            <span>Work Report</span>
+          </div>
+          <p className="text-[#475569] text-sm mb-2" style={{ fontSize: '13px' }}>
+            {task.workReport.actionsTaken || 'No summary provided.'}
+          </p>
+          {task.workReport.images?.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto py-1">
+              {task.workReport.images.slice(0, 3).map((src, index) => (
+                <img
+                  key={index}
+                  src={src}
+                  alt={`Report image ${index + 1}`}
+                  className="h-12 w-12 rounded object-cover border border-[#e2e8f0]"
+                />
+              ))}
+              {task.workReport.images.length > 3 && (
+                <span className="text-[#475569] text-xs">+{task.workReport.images.length - 3} more</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {task.submitterName && (
+        <div className="mt-3 text-sm text-slate-500">
+          <span className="font-semibold text-slate-900">Submitted by:</span> {task.submitterName}
+        </div>
+      )}
+
       <div className="mt-3 pt-3 border-t border-[#e2e8f0]">
         <span className="font-mono text-[#94a3b8]" style={{ fontSize: '10px' }}>
-          {task.complaintLabel || task.complaintId || task.id}b
+          {task.complaintLabel || task.complaintId || task.id}
         </span>
       </div>
     </motion.div>

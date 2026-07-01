@@ -533,7 +533,9 @@ export function AssignTaskModal({ open, task, complaint, technicians, onClose, o
           <Button variant="outline" onClick={onClose} disabled={loading} className="text-slate-700">Cancel</Button>
           { (task.assigneeId || task.assigneeName) ? (
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => { if (onUnassign) { onUnassign(complaint._id, task._id); onClose(); } }} disabled={loading} className="text-rose-600">Unassign</Button>
+              {task.status !== 'done' && (
+                <Button variant="outline" onClick={() => { if (onUnassign) { onUnassign(complaint._id, task._id); onClose(); } }} disabled={loading} className="text-rose-600">Unassign</Button>
+              )}
               <Button disabled className="bg-blue-600 text-white">Already assigned</Button>
             </div>
           ) : (

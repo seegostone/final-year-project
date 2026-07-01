@@ -70,6 +70,9 @@ const technicianService = {
           dueDate: response.data.dueDate || response.data.deadline,
           complaintLabel: response.data.complaintLabel || response.data.complaintId,
           taskCode: response.data.taskCode || response.data.id,
+          location: response.data.location || response.data.complaintLocation || response.data.location,
+          complaintLocation: response.data.complaintLocation,
+          assignedTo: response.data.assignedTo || response.data.assigneeName || response.data.assignedTo,
         };
       }
       throw new Error(response.message || 'Failed to fetch task details');
@@ -80,11 +83,33 @@ const technicianService = {
   },
 
   // Update task status with work report
-  async updateTaskStatus(complaintId, taskId, statusUpdate) {
+  async updateTaskStatus(complaintId, taskId, statusUpdate, images) {
     try {
+      const formData = new FormData();
+      Object.entries(statusUpdate || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          if (typeof value === 'object' && !(value instanceof File)) {
+            formData.append(key, JSON.stringify(value));
+          } else {
+            formData.append(key, String(value));
+          }
+        }
+      });
+
+      if (images && images.length) {
+        images.forEach((file, index) => {
+          formData.append('taskImages', file);
+        });
+      }
+
       const response = await axiosInstance.patch(
         `/technician/tasks/${complaintId}/${taskId}/status`,
-        statusUpdate
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
       );
       
       if (response.success) {

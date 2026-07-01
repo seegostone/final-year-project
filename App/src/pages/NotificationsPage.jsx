@@ -236,6 +236,23 @@ export default function NotificationsPage() {
       console.warn('Notification route is not internal or unavailable:', route);
       return;
     }
+
+    // Only navigate to routes that are supported by the frontend to avoid redirecting to empty pages
+    const allowedPrefixes = ['/complaints/', '/technician/', '/management/', '/dashboard', '/tasks/'];
+    const matches = allowedPrefixes.some((p) => route.startsWith(p) || route === p);
+    if (!matches) {
+      console.warn('Notification route not supported in this UI:', route);
+      navigate('/dashboard');
+      return;
+    }
+
+    // Role-based guard: management routes only for officer roles
+    if (route.startsWith('/management') && !isOfficer) {
+      console.warn('User not authorized for management route:', route);
+      navigate('/dashboard');
+      return;
+    }
+
     navigate(route);
   };
 
@@ -342,7 +359,7 @@ export default function NotificationsPage() {
 
           {loading ? (
             <div className="rounded-3xl border border-slate-200 bg-white p-6 text-slate-500 shadow-sm">
-              Loading notificationsâ€¦
+              Loading notifications…
             </div>
           ) : notifications.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">
@@ -379,7 +396,7 @@ export default function NotificationsPage() {
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               <button type="button" onClick={() => toggleRead(notification)} aria-label="Toggle read" className="text-xs rounded-full bg-slate-100 px-2 py-1">{notification.isRead ? 'Mark unread' : 'Mark read'}</button>
-                              <button type="button" onClick={() => openNotificationDetail(notification)} aria-label="More actions" className="text-xs rounded-full bg-slate-100 px-2 py-1">â‹¯</button>
+                              <button type="button" onClick={() => openNotificationDetail(notification)} aria-label="More actions" className="text-xs rounded-full bg-slate-100 px-2 py-1">⋯</button>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -397,13 +414,22 @@ export default function NotificationsPage() {
                             {iconLabel}
                           </span>
                           {notification.route && notification.route.startsWith('/') && (
-                            <button
-                              type="button"
-                              onClick={() => openNotificationRoute(notification.route)}
-                              className="rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-[11px] text-slate-500 transition hover:bg-slate-200"
-                            >
-                              Tap to open
-                            </button>
+                            // Only show the open button if the route is likely supported and allowed for the user
+                            (function renderOpenButton() {
+                              const allowedPrefixes = ['/complaints/', '/technician/', '/management/', '/dashboard', '/tasks/'];
+                              const matches = allowedPrefixes.some((p) => notification.route.startsWith(p) || notification.route === p);
+                              const routeAllowed = matches && !(notification.route.startsWith('/management') && !isOfficer);
+                              if (!routeAllowed) return null;
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => openNotificationRoute(notification.route)}
+                                  className="rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-[11px] text-slate-500 transition hover:bg-slate-200"
+                                >
+                                  Open
+                                </button>
+                              );
+                            })()
                           )}
                         </div>
                       </div>

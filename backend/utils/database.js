@@ -753,6 +753,7 @@ export const complaintOperations = {
       complaintNumber: nextNumber,
       userId: new ObjectId(userId),
       userRole: userRole,
+      submitterName: complaintData.submitterName || 'Resident',
       title: complaintData.title,
       location: complaintData.location,
       category: complaintData.category,

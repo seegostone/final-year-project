@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb';
 import { validationResult } from 'express-validator';
 import { protect } from '../middleware/auth.js';
 import emailService from '../services/emailService.js';
+import { upload, handleMulterError } from '../config/multer.js';
 
 const router = express.Router();
 
@@ -76,6 +77,7 @@ router.get(
               complaintDescription: '$description',
               complaintCategory: '$category',
               complaintLocation: '$location',
+              complaintScopeLocation: '$scopeDefinition.location',
               tasks: {
                 $filter: {
                   input: '$tasks',
@@ -104,7 +106,8 @@ router.get(
               completedAt: '$tasks.completedAt',
               assigneeName: '$tasks.assigneeName',
               assignedAt: '$tasks.assignedAt',
-              location: '$complaintLocation',
+              location: { $ifNull: ['$complaintScopeLocation', '$complaintLocation'] },
+              complaintSubmitterName: '$submitterName',
               complaintTitle: 1,
               createdAt: '$tasks.createdAt',
               notes: '$tasks.notes',
@@ -136,6 +139,7 @@ router.get(
         workReport: doc.workReport,
         pendingInfo: doc.pendingInfo,
         complaintTitle: doc.complaintTitle,
+        submitterName: doc.complaintSubmitterName || 'Resident',
       }));
 
       res.status(200).json({
@@ -237,6 +241,7 @@ router.get(
           deadline: task.deadline?.toISOString(),
           completedAt: task.completedAt?.toISOString(),
           assigneeName: task.assigneeName,
+          assignedTo: task.assigneeName || (task.assigneeId ? task.assigneeId.toString() : null),
           createdAt: task.createdAt?.toISOString(),
           notes: task.notes,
           workReport: task.workReport,
@@ -244,7 +249,9 @@ router.get(
           complaintTitle: complaint.title,
           complaintDescription: complaint.description,
           complaintCategory: complaint.category,
+          location: task.location || complaint.scopeDefinition?.location || complaint.location,
           complaintLocation: complaint.scopeDefinition?.location || complaint.location,
+          submitterName: complaint.submitterName || complaint.history?.find((entry) => entry.action === 'submitted')?.byName || 'Resident',
           activityLog: task.activityLog || [],
         },
       });
@@ -263,6 +270,8 @@ router.patch(
   '/tasks/:complaintId/:taskId/status',
   protect,
   technicianOnly,
+  upload.array('taskImages', 5),
+  handleMulterError,
   [
     param('complaintId').notEmpty().withMessage('Invalid complaint ID'),
     param('taskId').notEmpty().withMessage('Invalid task ID'),
@@ -270,8 +279,32 @@ router.patch(
       .notEmpty()
       .isIn(['open', 'in_progress', 'done', 'blocked'])
       .withMessage('Status must be: open, in_progress, done, or blocked'),
-    body('workReport').optional().isObject(),
-    body('pendingInfo').optional().isObject(),
+    body('workReport')
+      .optional()
+      .custom((value) => {
+        if (typeof value === 'string') {
+          try {
+            JSON.parse(value);
+            return true;
+          } catch {
+            throw new Error('Invalid workReport format');
+          }
+        }
+        return typeof value === 'object';
+      }),
+    body('pendingInfo')
+      .optional()
+      .custom((value) => {
+        if (typeof value === 'string') {
+          try {
+            JSON.parse(value);
+            return true;
+          } catch {
+            throw new Error('Invalid pendingInfo format');
+          }
+        }
+        return typeof value === 'object';
+      }),
     body('notes').optional().isString(),
   ],
   async (req, res) => {
@@ -284,7 +317,22 @@ router.patch(
       const db = req.app.locals.db;
       const technicianId = req.user._id;
       const { complaintId, taskId } = req.params;
-      const { status, workReport, pendingInfo, notes } = req.body;
+      let { status, workReport, pendingInfo, notes } = req.body;
+
+      if (typeof workReport === 'string') {
+        try {
+          workReport = JSON.parse(workReport);
+        } catch {
+          workReport = null;
+        }
+      }
+      if (typeof pendingInfo === 'string') {
+        try {
+          pendingInfo = JSON.parse(pendingInfo);
+        } catch {
+          pendingInfo = null;
+        }
+      }
 
       if (!complaintId || !taskId) {
         return res.status(400).json({
@@ -341,11 +389,15 @@ router.patch(
         updateFields['tasks.$[t].startedAt'] = new Date();
       }
 
+      const uploadedImages = (req.files || []).map((file) => `/uploads/complaints/${file.filename}`);
+
       if (workReport) {
         updateFields['tasks.$[t].workReport'] = {
           actionsTaken: workReport.actionsTaken,
           materialsUsed: workReport.materialsUsed || [],
           hoursSpent: workReport.hoursSpent,
+          additionalNotes: workReport.additionalNotes || null,
+          images: uploadedImages.length ? uploadedImages : (workReport.images || []),
           submittedAt: new Date(),
           submittedBy: technicianId,
         };
@@ -381,12 +433,18 @@ router.patch(
         ? { $or: [{ 't._id': new ObjectId(taskId) }, { 't.taskCode': taskId }, { 't.taskId': taskId }, { 't.id': taskId }] }
         : { $or: [{ 't.taskCode': taskId }, { 't.taskId': taskId }, { 't.id': taskId }] };
 
+      const updatePayload = {
+        $set: updateFields,
+        $push: { 'tasks.$[t].activityLog': activityEntry },
+      };
+
+      if (uploadedImages.length) {
+        updatePayload.$push['tasks.$[t].images'] = { $each: uploadedImages };
+      }
+
       const result = await complaints.updateOne(
         complaintQuery,
-        {
-          $set: updateFields,
-          $push: { 'tasks.$[t].activityLog': activityEntry },
-        },
+        updatePayload,
         { arrayFilters: [taskArrayFilter] }
       );
 
@@ -503,6 +561,7 @@ router.patch(
           status: finalTask.status,
           workReport: finalTask.workReport,
           pendingInfo: finalTask.pendingInfo,
+          images: finalTask.images || [],
           completedAt: finalTask.completedAt?.toISOString(),
           updatedAt: finalTask.updatedAt?.toISOString(),
         },

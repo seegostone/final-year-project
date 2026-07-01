@@ -1,0 +1,50 @@
+services:
+  mongo:
+    image: mongo:6.0
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ./Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/finalyearproject}
+      MONGODB_HOST: mongo
+      MONGODB_PORT: 27017
+      WAIT_TIMEOUT: 30000
+      NODE_ENV: development
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./App
+      dockerfile: ./Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    restart: unless-stopped
+    environment:
+      API_BACKEND_URL: ${API_BACKEND_URL:-http://backend:5000}
+      VITE_API_URL: ${VITE_API_URL:-/api}
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo-data:
+    driver: local
