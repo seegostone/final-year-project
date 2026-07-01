@@ -20,6 +20,11 @@ axiosInstance.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Let browser set the multipart boundary when sending FormData.
+    if (config.data instanceof FormData && config.headers) {
+      delete config.headers['Content-Type'];
+    }
     
     // You can add loading indicator here
     // document.body.style.cursor = 'progress';

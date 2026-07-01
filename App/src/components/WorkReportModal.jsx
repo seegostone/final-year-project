@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { X, Plus, ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }) {
+export function WorkReportModal({ isOpen, onClose, onSubmit, submitting = false, taskId, taskTitle }) {
   const [actionsTaken, setActionsTaken] = useState('');
   const [materialsUsed, setMaterialsUsed] = useState([]);
   const [currentMaterial, setCurrentMaterial] = useState('');
@@ -251,15 +251,16 @@ export function WorkReportModal({ isOpen, onClose, onSubmit, taskId, taskTitle }
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <button
                     type="submit"
-                    disabled={isSubmitDisabled}
+                    disabled={submitting || isSubmitDisabled}
                     className="flex-1 rounded-3xl bg-slate-900 px-6 py-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed"
                   >
-                    Resolve Task
+                    {submitting ? 'Resolving...' : 'Resolve Task'}
                   </button>
                   <button
                     type="button"
                     onClick={onClose}
-                    className="rounded-3xl border border-slate-200 bg-white px-6 py-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                    disabled={submitting}
+                    className="rounded-3xl border border-slate-200 bg-white px-6 py-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Cancel
                   </button>

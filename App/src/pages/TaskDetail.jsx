@@ -120,9 +120,9 @@ export function TaskDetail() {
         displayStatus: newStatus,
         workReport: {
           ...report,
-          images: response.data?.workReport?.images || report.images || [],
+          images: response.workReport?.images || report.images || [],
         },
-        images: response.data?.images || report.images || [],
+        images: response.images || report.images || [],
       } : prev);
       setTaskStatus(newStatus);
       emitAppEvent('notificationsUpdated');
@@ -437,6 +437,7 @@ export function TaskDetail() {
         isOpen={showWorkReport}
         onClose={() => setShowWorkReport(false)}
         onSubmit={handleResolve}
+        submitting={submitting}
         taskId={displayTaskCode}
         taskTitle={task.title}
       />

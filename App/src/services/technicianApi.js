@@ -85,11 +85,31 @@ const technicianService = {
   // Update task status with work report
   async updateTaskStatus(complaintId, taskId, statusUpdate, images) {
     try {
+      const stripFiles = (value) => {
+        if (value instanceof File) {
+          return undefined;
+        }
+        if (Array.isArray(value)) {
+          return value
+            .map(stripFiles)
+            .filter((item) => item !== undefined);
+        }
+        if (value && typeof value === 'object') {
+          return Object.entries(value).reduce((acc, [key, item]) => {
+            const sanitized = stripFiles(item);
+            if (sanitized !== undefined) acc[key] = sanitized;
+            return acc;
+          }, {});
+        }
+        return value;
+      };
+
       const formData = new FormData();
       Object.entries(statusUpdate || {}).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           if (typeof value === 'object' && !(value instanceof File)) {
-            formData.append(key, JSON.stringify(value));
+            const normalizedValue = stripFiles(value);
+            formData.append(key, JSON.stringify(normalizedValue));
           } else {
             formData.append(key, String(value));
           }
@@ -97,7 +117,7 @@ const technicianService = {
       });
 
       if (images && images.length) {
-        images.forEach((file, index) => {
+        images.forEach((file) => {
           formData.append('taskImages', file);
         });
       }
@@ -107,7 +127,7 @@ const technicianService = {
         formData,
         {
           headers: {
-            'Content-Type': 'multipart/form-data',
+            'Content-Type': undefined,
           },
         }
       );
